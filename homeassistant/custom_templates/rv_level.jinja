@@ -1,0 +1,43 @@
+{#- Lift and block-layer calculation for the RV level dashboard.
+    Heights are relative to the centre; +pitch = nose up, +roll = driver (left) side up.
+    Wheels can only be raised, so every corner comes up to the highest one. -#}
+
+{#- The BTHome entity behind each reading. HA names them rv_level_<last 4 of MAC>_<type>, and the
+    firmware sends pitch before roll, so roll is always rotation_2. Entities renamed to
+    rv_level_ble_<role> (the old install step) win. With neither, the renamed ID is returned, which
+    has no state, so the readings go unavailable and the Problem sensor turns on. -#}
+{%- macro rv_level_src(role) -%}
+{%- set m = {'pitch': ('sensor', 'rotation'), 'roll': ('sensor', 'rotation_2'),
+             'level': ('binary_sensor', 'generic'), 'moving': ('binary_sensor', 'moving'),
+             'problem': ('binary_sensor', 'problem')}[role] -%}
+{%- set bthome = integration_entities('bthome') -%}
+{%- set renamed = m[0] ~ '.rv_level_ble_' ~ role -%}
+{%- if renamed in bthome -%}{{ renamed }}
+{%- else -%}{{ bthome | select('match', m[0] ~ '\\.rv_level_[0-9a-f]{4}_' ~ m[1] ~ '$') | first | default(renamed, true) }}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro rv_level_lift(corner) -%}
+{%- set p = states('sensor.rv_level_pitch') | float(none) -%}
+{%- set r = states('sensor.rv_level_roll') | float(none) -%}
+{%- if p is none or r is none -%}unknown{%- else -%}
+{%- set wb = states('input_number.rv_level_wheelbase') | float(159) -%}
+{%- set t = states('input_number.rv_level_track') | float(68.5) -%}
+{%- set a = wb / 2 * tan(p * pi / 180) -%}
+{%- set b = t / 2 * tan(r * pi / 180) -%}
+{%- set h = {'fl': a + b, 'fr': a - b, 'rl': b - a, 'rr': -a - b} -%}
+{{- ((h.values() | max) - h[corner]) | round(2) -}}
+{%- endif -%}
+{%- endmacro -%}
+
+{%- macro rv_level_layers(corner) -%}
+{%- set lift = rv_level_lift(corner) | float(none) -%}
+{%- if lift is none -%}unknown{%- else -%}
+{%- set tol = states('input_number.rv_level_tolerance') | float(0.5) -%}
+{%- set bh = states('input_number.rv_level_block_height') | float(1) -%}
+{%- if lift <= tol -%}0{%- else -%}
+{#- nearest whole block, exactly half rounding down: a block only when it gets the wheel closer -#}
+{{- (lift / bh - 0.5) | round(4) | round(0, 'ceil') | int -}}
+{%- endif -%}
+{%- endif -%}
+{%- endmacro -%}

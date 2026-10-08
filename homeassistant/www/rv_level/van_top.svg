@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 600" width="520" height="600">
+  <!-- Top-down Ram ProMaster outline for the RV level dashboard.
+       Front at the top, driver side on the left. Wheel centres sit at
+       ~22 % / 78 % down and ~34 % / 66 % across; corner cards go outside them. -->
+  <g fill="none" stroke="#8a8f98" stroke-width="4" stroke-linejoin="round">
+    <!-- wheels (drawn first so the body overlaps them) -->
+    <g fill="#8a8f98" fill-opacity="0.55">
+      <rect x="161" y="95" width="28" height="70" rx="6"/>
+      <rect x="331" y="95" width="28" height="70" rx="6"/>
+      <rect x="161" y="430" width="28" height="70" rx="6"/>
+      <rect x="331" y="430" width="28" height="70" rx="6"/>
+    </g>
+    <!-- body with a short hood -->
+    <path d="M 205 40 L 315 40 Q 345 40 345 75 L 345 540 Q 345 560 325 560 L 195 560 Q 175 560 175 540 L 175 75 Q 175 40 205 40 Z"
+          fill="#8a8f98" fill-opacity="0.12"/>
+    <!-- windshield and cab -->
+    <path d="M 182 130 Q 260 112 338 130"/>
+    <line x1="175" y1="205" x2="345" y2="205" stroke-opacity="0.5" stroke-dasharray="8 6"/>
+    <!-- mirrors -->
+    <rect x="160" y="178" width="15" height="10" rx="3"/>
+    <rect x="345" y="178" width="15" height="10" rx="3"/>
+  </g>
+  <g fill="#8a8f98" font-family="sans-serif" font-weight="600" text-anchor="middle">
+    <text x="260" y="28" font-size="20">FRONT</text>
+    <text x="140" y="300" font-size="16" transform="rotate(-90 140 300)">DRIVER</text>
+  </g>
+</svg>

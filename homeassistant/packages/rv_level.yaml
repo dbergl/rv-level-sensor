@@ -1,0 +1,144 @@
+# RV level sensor (BTHome) -> per-wheel lift and block layers.
+# Needs custom_templates/rv_level.jinja, which finds the BTHome entities (no renaming needed).
+
+# Adds the RV Level dashboard to the sidebar, read from dashboards/rv_level.yaml.
+lovelace:
+  dashboards:
+    rv-level:
+      mode: yaml
+      filename: dashboards/rv_level.yaml
+      title: RV Level
+      icon: mdi:spirit-level
+      show_in_sidebar: true
+
+input_number:
+  rv_level_wheelbase:
+    name: RV Level Wheelbase
+    initial: 159
+    min: 80
+    max: 300
+    step: 0.5
+    unit_of_measurement: in
+    mode: box
+  rv_level_track:
+    name: RV Level Track
+    initial: 68.5
+    min: 40
+    max: 110
+    step: 0.5
+    unit_of_measurement: in
+    mode: box
+  rv_level_block_height:
+    name: RV Level Block Height
+    initial: 1.0
+    min: 0.25
+    max: 4
+    step: 0.05
+    unit_of_measurement: in
+    mode: box
+  rv_level_tolerance:
+    name: RV Level Tolerance
+    initial: 0.5  # blocks round to the nearest one, so anything up to half a block has no effect
+    min: 0
+    max: 2
+    step: 0.05
+    unit_of_measurement: in
+    mode: box
+  rv_level_blocks_carried:
+    name: RV Level Blocks Carried
+    initial: 10
+    min: 0
+    max: 50
+    step: 1
+    mode: box
+
+template:
+  - sensor:
+      - name: RV Level Pitch
+        unique_id: rv_level_pitch
+        unit_of_measurement: "°"
+        state_class: measurement
+        icon: mdi:angle-acute
+        availability: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('pitch') | trim %}{{ has_value(s) }}"
+        state: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('pitch') | trim %}{{ states(s) | float(0) | round(1) }}"
+      - name: RV Level Roll
+        unique_id: rv_level_roll
+        unit_of_measurement: "°"
+        state_class: measurement
+        icon: mdi:angle-acute
+        availability: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('roll') | trim %}{{ has_value(s) }}"
+        state: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('roll') | trim %}{{ states(s) | float(0) | round(1) }}"
+      - name: RV Level Lift FL
+        unique_id: rv_level_lift_fl
+        unit_of_measurement: in
+        icon: mdi:arrow-up-bold
+        availability: &angles "{{ has_value('sensor.rv_level_pitch') and has_value('sensor.rv_level_roll') }}"
+        state: "{% from 'rv_level.jinja' import rv_level_lift %}{{ rv_level_lift('fl') }}"
+      - name: RV Level Lift FR
+        unique_id: rv_level_lift_fr
+        unit_of_measurement: in
+        icon: mdi:arrow-up-bold
+        availability: *angles
+        state: "{% from 'rv_level.jinja' import rv_level_lift %}{{ rv_level_lift('fr') }}"
+      - name: RV Level Lift RL
+        unique_id: rv_level_lift_rl
+        unit_of_measurement: in
+        icon: mdi:arrow-up-bold
+        availability: *angles
+        state: "{% from 'rv_level.jinja' import rv_level_lift %}{{ rv_level_lift('rl') }}"
+      - name: RV Level Lift RR
+        unique_id: rv_level_lift_rr
+        unit_of_measurement: in
+        icon: mdi:arrow-up-bold
+        availability: *angles
+        state: "{% from 'rv_level.jinja' import rv_level_lift %}{{ rv_level_lift('rr') }}"
+      - name: RV Level Blocks FL
+        unique_id: rv_level_blocks_fl
+        icon: mdi:layers-triple
+        availability: *angles
+        state: "{% from 'rv_level.jinja' import rv_level_layers %}{{ rv_level_layers('fl') }}"
+      - name: RV Level Blocks FR
+        unique_id: rv_level_blocks_fr
+        icon: mdi:layers-triple
+        availability: *angles
+        state: "{% from 'rv_level.jinja' import rv_level_layers %}{{ rv_level_layers('fr') }}"
+      - name: RV Level Blocks RL
+        unique_id: rv_level_blocks_rl
+        icon: mdi:layers-triple
+        availability: *angles
+        state: "{% from 'rv_level.jinja' import rv_level_layers %}{{ rv_level_layers('rl') }}"
+      - name: RV Level Blocks RR
+        unique_id: rv_level_blocks_rr
+        icon: mdi:layers-triple
+        availability: *angles
+        state: "{% from 'rv_level.jinja' import rv_level_layers %}{{ rv_level_layers('rr') }}"
+  - binary_sensor:
+      - name: RV Level Level
+        unique_id: rv_level_level
+        icon: mdi:thumb-up
+        availability: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('level') | trim %}{{ has_value(s) }}"
+        state: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('level') | trim %}{{ is_state(s, 'on') }}"
+      - name: RV Level Moving
+        unique_id: rv_level_moving
+        device_class: moving
+        availability: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('moving') | trim %}{{ has_value(s) }}"
+        state: "{% from 'rv_level.jinja' import rv_level_src %}{% set s = rv_level_src('moving') | trim %}{{ is_state(s, 'on') }}"
+      - name: RV Level Problem
+        unique_id: rv_level_problem
+        device_class: problem
+        state: >-
+          {% from 'rv_level.jinja' import rv_level_src %}
+          {% set problem = rv_level_src('problem') | trim %}
+          {{ is_state(problem, 'on')
+             or not has_value(problem)
+             or not has_value(rv_level_src('pitch') | trim)
+             or not has_value(rv_level_src('roll') | trim) }}
+      - name: RV Level Short On Blocks
+        unique_id: rv_level_short_on_blocks
+        device_class: problem
+        availability: *angles
+        state: >-
+          {% from 'rv_level.jinja' import rv_level_layers %}
+          {{ (rv_level_layers('fl') | int(0) + rv_level_layers('fr') | int(0)
+              + rv_level_layers('rl') | int(0) + rv_level_layers('rr') | int(0))
+             > states('input_number.rv_level_blocks_carried') | float(10) }}

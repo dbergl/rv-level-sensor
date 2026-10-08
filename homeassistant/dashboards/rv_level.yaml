@@ -1,0 +1,200 @@
+views:
+  - title: Level
+    path: rv-level
+    icon: "mdi:car-brake-fluid-level"
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: picture-elements
+            image: /local/rv_level/van_top.svg
+            elements:
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.rv_level_problem
+                    state: "off"
+                elements:
+                  - type: custom:mushroom-template-card
+                    entity: sensor.rv_level_blocks_fl
+                    primary: "{{ states(entity) }}"
+                    secondary: "{{ states('sensor.rv_level_lift_fl') | float(0) | round(1) }} in"
+                    icon: >-
+                      {% set n = states(entity) | int(0) %}
+                      {% if n >= 4 %}mdi:chevron-triple-up
+                      {% elif n >= 2 %}mdi:chevron-double-up
+                      {% elif n == 1 %}mdi:chevron-up
+                      {% else %}mdi:check{% endif %}
+                    icon_color: "{{ 'blue' if states(entity) | int(0) > 0 else 'grey' }}"
+                    layout: horizontal
+                    tap_action:
+                      action: none
+                    style:
+                      top: 22%
+                      left: 16%
+                      width: 110px
+                  - type: custom:mushroom-template-card
+                    entity: sensor.rv_level_blocks_fr
+                    primary: "{{ states(entity) }}"
+                    secondary: "{{ states('sensor.rv_level_lift_fr') | float(0) | round(1) }} in"
+                    icon: >-
+                      {% set n = states(entity) | int(0) %}
+                      {% if n >= 4 %}mdi:chevron-triple-up
+                      {% elif n >= 2 %}mdi:chevron-double-up
+                      {% elif n == 1 %}mdi:chevron-up
+                      {% else %}mdi:check{% endif %}
+                    icon_color: "{{ 'blue' if states(entity) | int(0) > 0 else 'grey' }}"
+                    layout: horizontal
+                    tap_action:
+                      action: none
+                    style:
+                      top: 22%
+                      left: 84%
+                      width: 110px
+                  - type: custom:mushroom-template-card
+                    entity: sensor.rv_level_blocks_rl
+                    primary: "{{ states(entity) }}"
+                    secondary: "{{ states('sensor.rv_level_lift_rl') | float(0) | round(1) }} in"
+                    icon: >-
+                      {% set n = states(entity) | int(0) %}
+                      {% if n >= 4 %}mdi:chevron-triple-up
+                      {% elif n >= 2 %}mdi:chevron-double-up
+                      {% elif n == 1 %}mdi:chevron-up
+                      {% else %}mdi:check{% endif %}
+                    icon_color: "{{ 'blue' if states(entity) | int(0) > 0 else 'grey' }}"
+                    layout: horizontal
+                    tap_action:
+                      action: none
+                    style:
+                      top: 78%
+                      left: 16%
+                      width: 110px
+                  - type: custom:mushroom-template-card
+                    entity: sensor.rv_level_blocks_rr
+                    primary: "{{ states(entity) }}"
+                    secondary: "{{ states('sensor.rv_level_lift_rr') | float(0) | round(1) }} in"
+                    icon: >-
+                      {% set n = states(entity) | int(0) %}
+                      {% if n >= 4 %}mdi:chevron-triple-up
+                      {% elif n >= 2 %}mdi:chevron-double-up
+                      {% elif n == 1 %}mdi:chevron-up
+                      {% else %}mdi:check{% endif %}
+                    icon_color: "{{ 'blue' if states(entity) | int(0) > 0 else 'grey' }}"
+                    layout: horizontal
+                    tap_action:
+                      action: none
+                    style:
+                      top: 78%
+                      left: 84%
+                      width: 110px
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.rv_level_level
+                    state: "on"
+                  - entity: binary_sensor.rv_level_problem
+                    state: "off"
+                elements:
+                  - type: custom:mushroom-template-card
+                    entity: binary_sensor.rv_level_level
+                    primary: LEVEL
+                    icon: "mdi:thumb-up"
+                    icon_color: green
+                    layout: vertical
+                    tap_action:
+                      action: none
+                    style:
+                      top: 50%
+                      left: 50%
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.rv_level_short_on_blocks
+                    state: "on"
+                  - entity: binary_sensor.rv_level_problem
+                    state: "off"
+                elements:
+                  - type: custom:mushroom-template-card
+                    entity: binary_sensor.rv_level_short_on_blocks
+                    primary: Short on blocks
+                    icon: "mdi:alert"
+                    icon_color: amber
+                    layout: vertical
+                    tap_action:
+                      action: none
+                    style:
+                      top: 50%
+                      left: 50%
+              - type: conditional
+                conditions:
+                  - entity: binary_sensor.rv_level_problem
+                    state: "on"
+                elements:
+                  - type: custom:mushroom-template-card
+                    entity: binary_sensor.rv_level_problem
+                    primary: Sensor fault
+                    icon: "mdi:alert-octagon"
+                    icon_color: red
+                    layout: vertical
+                    tap_action:
+                      action: none
+                    style:
+                      top: 50%
+                      left: 50%
+      - type: grid
+        cards:
+          - type: gauge
+            entity: sensor.rv_level_pitch
+            name: Pitch
+            unit: "°"
+            min: -10
+            max: 10
+            needle: true
+            grid_options:
+              columns: 6
+            segments:
+              - from: -10
+                color: "#d62b37"
+              - from: -3
+                color: "#fabe30"
+              - from: -1
+                color: "#2e9e5b"
+              - from: 1
+                color: "#fabe30"
+              - from: 3
+                color: "#d62b37"
+          - type: gauge
+            entity: sensor.rv_level_roll
+            name: Roll
+            unit: "°"
+            min: -10
+            max: 10
+            needle: true
+            grid_options:
+              columns: 6
+            segments:
+              - from: -10
+                color: "#d62b37"
+              - from: -3
+                color: "#fabe30"
+              - from: -1
+                color: "#2e9e5b"
+              - from: 1
+                color: "#fabe30"
+              - from: 3
+                color: "#d62b37"
+          - type: tile
+            entity: binary_sensor.rv_level_level
+            name: Level
+          - type: tile
+            entity: binary_sensor.rv_level_moving
+            name: Moving
+          - type: tile
+            entity: binary_sensor.rv_level_problem
+            name: Sensor fault
+          - type: entities
+            title: Vehicle & blocks
+            entities:
+              - input_number.rv_level_wheelbase
+              - input_number.rv_level_track
+              - input_number.rv_level_block_height
+              - input_number.rv_level_tolerance
+              - input_number.rv_level_blocks_carried
