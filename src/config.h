@@ -43,6 +43,9 @@ constexpr uint32_t BLE_ADV_INTERVAL_MS = 250;  // each reading (BLE_REFRESH_MS) 
 constexpr uint32_t BLE_REFRESH_MS = 500;
 // Re-send unchanged advert data with a new packet ID: recovers from a BLE host reset.
 constexpr uint32_t BLE_REAPPLY_MS = 10000;
+// Leaves out the Bluetooth update service: the sensor never accepts a connection, and a
+// GENERAL_RESET Reboot/Enter Bootloader restarts it instead. Updates are then USB only.
+constexpr bool BLE_OTA_DISABLED = true;
 
 // SK Pang ESP32 CAN-Bus board pins
 constexpr int PIN_CAN_TX = 25;

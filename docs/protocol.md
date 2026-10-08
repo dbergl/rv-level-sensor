@@ -98,7 +98,7 @@ selects it.
 |---|---|
 | Byte 0 bits 0–1, Reboot | ACK `00`, restart 250 ms later |
 | Byte 0 bits 4–5, Restore defaults | ACK `00`. Resets thresholds, zero and block config; sends both config statuses and record 04h |
-| Byte 1 bits 4–5, Reboot/Enter bootloader | ACK `00`, opens the Bluetooth update window (restarts instead if Bluetooth is not running) |
+| Byte 1 bits 4–5, Reboot/Enter bootloader | ACK `00`, opens the Bluetooth update window (restarts instead if Bluetooth is not running or updates are disabled in the build) |
 | Byte 0 bits 6–7, byte 1 bits 0–1, 2–3, 6–7 | NAK `01`; nothing changes |
 | Any field `10` | NAK `04` |
 
@@ -194,6 +194,8 @@ The two rotation objects are left out while the reading is invalid. The advert i
 every 500 ms and sent every 250 ms. Unchanged data is re-sent with a new packet ID every 10 s.
 
 ## Bluetooth update service
+
+Present only in builds with `BLE_OTA_DISABLED = false` (the default is `true`).
 
 The sensor accepts connections only while the update window is open. A GENERAL_RESET
 Reboot/Enter bootloader opens it for 5 minutes, and each control or data write moves the

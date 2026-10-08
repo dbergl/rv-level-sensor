@@ -195,6 +195,8 @@ void setup() {
   if constexpr (cfg::BLE_ENABLED) {
     if (!ble.begin(cfg::BLE_NAME, cfg::BLE_ADV_INTERVAL_MS, cfg::BLE_REFRESH_MS, cfg::BLE_REAPPLY_MS)) {
       Serial.println("BLE init failed");
+    } else if (cfg::BLE_OTA_DISABLED) {
+      Serial.println("Bluetooth updates disabled in this build");
     } else if (!bleOta.begin()) {
       Serial.println("BLE update service init failed");
     } else {

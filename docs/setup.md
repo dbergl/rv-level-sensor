@@ -15,7 +15,8 @@ three ways:
   blocks to put under each wheel.
 - **Over Bluetooth LE** in the BTHome v2 format, which Home Assistant picks up.
 
-It is powered from the RV-C bus, and it can be updated over Bluetooth once installed.
+It is powered from the RV-C bus. Builds with Bluetooth updates turned on can be updated over
+Bluetooth once installed.
 
 ## 2. Hardware requirements
 
@@ -152,7 +153,8 @@ openscad -o case/level_case_lid.stl    -D 'part="lid"'    case/level_case.scad
 - **A USB serial driver** for the board, if your operating system does not already have one.
 - Optional: [**uv**](https://docs.astral.sh/uv/), to run the Python test and update tools without
   installing their dependencies yourself.
-- **A firmware signing key.** Bluetooth updates must be signed, and the build embeds your public
+- **A firmware signing key**, only for builds with Bluetooth updates turned on
+  (`BLE_OTA_DISABLED = false`). Bluetooth updates must be signed, and the build embeds your public
   key. Create the key pair once with `uv run tools/ota/sign.py keygen`, which saves it in
   `~/.config/rv-level/`, and back up `ota_ed25519.pem`: anyone with it can update the sensor, and
   without it only a USB install can change the key. The firmware build stops if there is no key.
@@ -214,6 +216,7 @@ Compile-time settings live in `src/config.h`. Rebuild and reinstall after changi
 | `SENSOR_INSTANCE` | 1 | You have more than one leveling sensor on the bus. |
 | `SA_RANGE_HIGH`, `SA_RANGE_LOW` | 191, 176 (BFh–B0h) | The range of RV-C addresses it may claim. It starts at the top. |
 | `BLE_ENABLED` | `true` | `false` turns off the Bluetooth broadcast and Bluetooth updates. |
+| `BLE_OTA_DISABLED` | `true` | `false` turns on Bluetooth updates ([§8](#8-updating-over-bluetooth)). While `true`, the sensor accepts no Bluetooth connections and updates are USB only. |
 | `BLE_NAME` | "RV Level" | The Bluetooth name Home Assistant shows. |
 | `LED_BRIGHTNESS_PCT` | 3 | Status LED brightness, 0–100 % (0 = off). |
 | `PIN_*` | SK Pang board | You use a different ESP32 board or wiring. |
@@ -221,7 +224,8 @@ Compile-time settings live in `src/config.h`. Rebuild and reinstall after changi
 ## 8. Updating over Bluetooth
 
 Once the sensor is installed, later versions can be sent over Bluetooth without removing it.
-This needs a Linux computer (a Raspberry Pi works) that has:
+The firmware on the sensor must have been built with `BLE_OTA_DISABLED = false`
+([§7](#7-build-options)); the default build has Bluetooth updates turned off. This needs a Linux computer (a Raspberry Pi works) that has:
 
 - a SocketCAN interface on the coach's RV-C bus at 250 kbit/s (for example `can1`),
 - Bluetooth, within range of the sensor,

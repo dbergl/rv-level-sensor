@@ -8,7 +8,7 @@ An ESP32 RV-C node that measures coach pitch and roll with an MPU-6050 and repor
 - on RV-C as a proprietary per-wheel block-leveling message (1EFBFh) for a touchscreen panel;
 - over Bluetooth LE as a BTHome v2 broadcast for Home Assistant.
 
-Firmware updates can be sent over Bluetooth.
+Firmware updates can be sent over Bluetooth when enabled in the build (off by default).
 
 ## Documentation
 
