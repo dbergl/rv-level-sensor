@@ -7,6 +7,7 @@
 
 #include "hal/ble_bthome.h"
 #include "hal/ota_flash.h"
+#include "ota_pubkey.h"
 
 namespace {
 
@@ -62,7 +63,7 @@ class InfoCb : public NimBLECharacteristicCallbacks {
 }  // namespace
 
 BleOta::BleOta(OtaFlash& flash, BleBthome& adv, const char* version)
-    : adv_(adv), version_(version), session_(flash) {}
+    : adv_(adv), version_(version), session_(flash, kOtaPublicKey) {}
 
 bool BleOta::begin() {
   mu_ = xSemaphoreCreateMutex();
