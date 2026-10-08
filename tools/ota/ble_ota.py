@@ -2,7 +2,8 @@
 """Update the level sensor's firmware over Bluetooth. Runs on the Pi, which has the CAN bus and
 Bluetooth; tools/ota_deploy.sh copies it there with common.py and runs it.
 
-  python ble_ota.py firmware.bin [--bus can1] [--sa N] [--corrupt-byte N]
+  python ble_ota.py firmware.bin [--sig firmware.bin.sig] [--bus can1] [--sa N] [--corrupt-byte N]
+  python ble_ota.py firmware.bin --unsigned   # once: firmware that predates signed updates
   python ble_ota.py --info           # open the window, print Info, close it
   python ble_ota.py --open-window    # just open the window (for testing that it closes)
   python ble_ota.py --connect-test   # try to connect without opening the window
@@ -93,11 +94,11 @@ async def expect(q, timeout):
 
 
 def fail(name, value):
-    hint = p.flash_hint(value) if name == "ERR_FLASH" else ""
+    hint = {"ERR_FLASH": p.flash_hint, "ERR_SIGNATURE": p.signature_hint}.get(name, lambda _: "")(value)
     raise OtaError(f"{name} (0x{value:X}){': ' + hint if hint else ''}")
 
 
-async def upload(image, corrupt_byte):
+async def upload(image, signature, corrupt_byte):
     sent = bytearray(image)
     if corrupt_byte is not None:
         sent[corrupt_byte] ^= 0xFF  # BEGIN still carries the true hash: FINISH must refuse
@@ -108,8 +109,11 @@ async def upload(image, corrupt_byte):
         print(f"sensor: {old['version']} ({old['state']}, slot {old['slot']})")
         q = asyncio.Queue()
         await c.start_notify(p.CONTROL, lambda _, d: q.put_nowait(p.parse_notice(d)))
-        name, value = await control(c, q, p.begin_cmd(image), timeout=25)
+        begin = p.unsigned_begin_cmd(image) if signature is None else p.begin_cmd(image, signature)
+        name, value = await control(c, q, begin, timeout=25)
         if name != "OK":
+            if signature is not None and p.begin_hint(name, value):
+                raise OtaError(p.begin_hint(name, value))
             fail(name, value)
         s = p.Sender(len(image), p.chunk_size(c.mtu_size))
         t0, last = time.time(), -1
@@ -170,11 +174,24 @@ def main():
     ap.add_argument("--bus", default="can1")
     ap.add_argument("--sa", type=lambda v: int(v, 0))
     ap.add_argument("--corrupt-byte", type=int)
+    ap.add_argument("--sig", help="signature file (default: FIRMWARE.sig)")
+    ap.add_argument("--unsigned", action="store_true",
+                    help="send the pre-signing BEGIN; only for firmware that predates signed updates")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--info", action="store_true")
     mode.add_argument("--open-window", action="store_true")
     mode.add_argument("--connect-test", action="store_true")
     a = ap.parse_args()
+    signature = None
+    if a.firmware and not a.unsigned:
+        sig_path = a.sig or a.firmware + ".sig"
+        try:
+            with open(sig_path, "rb") as f:
+                signature = f.read()
+        except FileNotFoundError:
+            ap.error(f"{sig_path} not found: sign the image with tools/ota/sign.py, or pass --unsigned")
+        if len(signature) != 64:
+            ap.error(f"{sig_path} is {len(signature)} bytes, not a 64-byte Ed25519 signature")
 
     if a.connect_test:
         ok = asyncio.run(connect_test())
@@ -197,7 +214,7 @@ def main():
             ap.error("firmware.bin is required")
         with open(a.firmware, "rb") as f:
             image = f.read()
-        old = asyncio.run(upload(image, a.corrupt_byte))
+        old = asyncio.run(upload(image, signature, a.corrupt_byte))
         time.sleep(2)
         wait_for_status(bus, sa, 30)
         print("sensor back on the bus; waiting 35 s for it to confirm the new firmware")

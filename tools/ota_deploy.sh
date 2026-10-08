@@ -4,6 +4,7 @@
 #   tools/ota_deploy.sh                     # over Bluetooth (the sensor stays in place)
 #   tools/ota_deploy.sh --usb               # first install: over USB to the Pi's /dev/ttyUSB0
 #   tools/ota_deploy.sh -- --info           # extra arguments go to ble_ota.py
+#   tools/ota_deploy.sh -- --unsigned       # once, if the sensor's firmware predates signed updates
 #
 # Options: --host user@host (default pi@raspberrypi.local), --bus can1.
 set -euo pipefail
@@ -32,10 +33,13 @@ for x in "${extra[@]+"${extra[@]}"}"; do
   case $x in --info|--open-window|--connect-test) needs_build=0 ;; esac
 done
 if (( needs_build || usb )); then (cd "$root" && pio run -e esp32); fi
+# Sign here: the private key never goes to the Pi.
+if (( needs_build && !usb )); then uv run --quiet "$root/tools/ota/sign.py" sign "$build/firmware.bin"; fi
 
 ssh "$host" "mkdir -p $remote"
 files=("$root/tools/ota/ble_ota.py" "$root/tools/ota/ota_proto.py" "$root/tools/hwtest/common.py")
 if (( needs_build || usb )); then files+=("$build/firmware.bin"); fi
+if (( needs_build && !usb )); then files+=("$build/firmware.bin.sig"); fi
 scp -q "${files[@]}" "$host:$remote/"
 ssh "$host" "cd $remote && { test -x venv/bin/python || python3 -m venv venv; } &&
   venv/bin/pip install -q --disable-pip-version-check bleak python-can esptool"
