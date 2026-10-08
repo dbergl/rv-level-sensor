@@ -4,13 +4,47 @@ import struct
 import ota_proto as p
 
 
+def test_signed_message_layout():
+    img = bytes(range(256)) * 3
+    m = p.signed_message(img)
+    assert len(m) == 52
+    assert m[:16] == b"RV-Level OTA v1\x00"
+    assert struct.unpack("<I", m[16:20])[0] == len(img)
+    assert m[20:] == hashlib.sha256(img).digest()
+
+
 def test_begin_cmd_layout():
     img = bytes(range(256)) * 3
-    cmd = p.begin_cmd(img)
-    assert len(cmd) == 37
+    sig = bytes(range(64))
+    cmd = p.begin_cmd(img, sig)
+    assert len(cmd) == 101
     assert cmd[0] == p.BEGIN
     assert struct.unpack("<I", cmd[1:5])[0] == len(img)
-    assert cmd[5:] == hashlib.sha256(img).digest()
+    assert cmd[5:37] == hashlib.sha256(img).digest()
+    assert cmd[37:] == sig
+
+
+def test_begin_cmd_needs_a_64_byte_signature():
+    import pytest
+    with pytest.raises(ValueError):
+        p.begin_cmd(b"x", b"short")
+
+
+def test_unsigned_begin_cmd_is_the_old_layout():
+    img = b"abc"
+    assert p.unsigned_begin_cmd(img) == p.begin_cmd(img, bytes(64))[:37]
+
+
+def test_signature_notice_and_hints():
+    assert p.parse_notice(b"\x18\x01\x00\x00\x00") == ("ERR_SIGNATURE", 1)
+    assert "unsigned" in p.signature_hint(0)
+    assert "key" in p.signature_hint(1)
+
+
+def test_begin_hint_for_old_firmware():
+    assert "--unsigned" in p.begin_hint("ERR_BAD_COMMAND", 0)
+    assert p.begin_hint("ERR_BAD_COMMAND", 5) == ""
+    assert p.begin_hint("ERR_FLASH", 0) == ""
 
 
 def test_data_write_layout():
