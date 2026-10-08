@@ -24,9 +24,9 @@ Bluetooth once installed.
 
 | Part | Qty | Notes |
 |---|---|---|
-| [SK Pang ESP32 CAN-Bus board](https://www.skpang.co.uk/) | 1 | ESP32 with an MCP2562 CAN transceiver, a 12 V regulator, a Qwiic socket and an RGB LED. The firmware's pin map is for this board (schematic rev B). |
+| [SK Pang ESP32 CAN-Bus board](https://www.skpang.co.uk/) | 1 | ESP32 with an MCP2562 CAN transceiver, a 12 V regulator and an RGB LED. The firmware's pin map is for this board (schematic rev B). |
 | GY-521 breakout (MPU-6050) | 1 | The accelerometer and gyroscope. Any GY-521 works. |
-| 4 short wires | 1 set | GY-521 to the board, under 30 cm. Solder them, or use a Qwiic-to-female-jumper cable. |
+| 4 short wires | 1 set | GY-521 to the board's header JP2, under 30 cm. |
 | RV-C drop cable | 1 | CAN-H, CAN-L, ground and +12 V to the board's 4-pin connector J3. |
 | 3D-printed case | 1 | Optional. See [§5](#5-case). |
 
@@ -55,10 +55,10 @@ Check them against your board's silkscreen before powering up.
 ```
  GY-521 (MPU-6050)            SK Pang ESP32 CAN-Bus board
  ┌───────────┐
- │ VCC  ●────┼──────────────── 3.3V   (J5 Qwiic pin 2, or JP2 pin 1)
- │ GND  ●────┼──────────────── GND    (J5 Qwiic pin 1, or JP2 pin 2)
- │ SCL  ●────┼──────────────── SCL    (J5 Qwiic pin 4, or JP2 pin 11)  = GPIO22
- │ SDA  ●────┼──────────────── SDA    (J5 Qwiic pin 3, or JP2 pin 12)  = GPIO23
+ │ VCC  ●────┼──────────────── 3.3V   (JP2 pin 1)
+ │ GND  ●────┼──────────────── GND    (JP2 pin 2)
+ │ SCL  ●────┼──────────────── SCL    (JP2 pin 11)  = GPIO22
+ │ SDA  ●────┼──────────────── SDA    (JP2 pin 12)  = GPIO23
  │ XDA  ●    │  not connected
  │ XCL  ●    │  not connected
  │ AD0  ●    │  not connected (I²C address 0x68)
@@ -73,9 +73,8 @@ Check them against your board's silkscreen before powering up.
 ```
 
 - **Power the GY-521 from 3.3 V, not 5 V.** The ESP32's I/O is 3.3 V only.
-- J5 is a Qwiic (JST-SH, 1 mm pitch) socket and the GY-521 has 0.1″ pins. Use a
-  Qwiic-to-female-jumper cable on the bench, or solder to header JP2. In the case, solder the wires
-  directly to the GY-521: there is no room for jumper plugs.
+- Both the GY-521 and header JP2 have 0.1″ pins. Jumper wires work on the bench; in the case,
+  solder the wires directly to the GY-521: there is no room for jumper plugs.
 - Keep the I²C wires short (under about 30 cm). The bus runs at 400 kHz.
 - **Always connect ground** (J3 pin 3) to the RV-C ground, not just CAN-H and CAN-L.
 - **Termination:** fit the 120 Ω jumper (JP1) **only** if the sensor is at the physical end of the

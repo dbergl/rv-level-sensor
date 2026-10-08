@@ -50,7 +50,7 @@ constexpr bool BLE_OTA_DISABLED = true;
 // SK Pang ESP32 CAN-Bus board pins
 constexpr int PIN_CAN_TX = 25;
 constexpr int PIN_CAN_RX = 26;
-constexpr int PIN_SDA = 23;  // board routes Qwiic J5 / JP2-12 SDA to IO23 (schematic rev B)
+constexpr int PIN_SDA = 23;  // board routes JP2-12 SDA to IO23 (schematic rev B)
 constexpr int PIN_SCL = 22;
 constexpr int PIN_LED_R = 2;
 constexpr int PIN_LED_G = 15;
