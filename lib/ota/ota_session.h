@@ -22,6 +22,7 @@ enum class Code : uint8_t {
   ErrInvalidImage = 0x15,
   ErrFlash = 0x16,
   ErrBadCommand = 0x17,
+  ErrSignature = 0x18,
 };
 
 struct Notice {
@@ -32,7 +33,7 @@ struct Notice {
 void packNotice(const Notice& n, uint8_t out[5]);  // code, then value little endian
 
 namespace op {
-constexpr uint8_t BEGIN = 0x01;   // size u32, SHA-256[32]
+constexpr uint8_t BEGIN = 0x01;   // size u32, SHA-256[32], Ed25519 signature[64]
 constexpr uint8_t FINISH = 0x02;
 constexpr uint8_t ABORT = 0x03;
 constexpr uint8_t CLOSE = 0x04;
@@ -41,6 +42,8 @@ constexpr uint8_t CLOSE = 0x04;
 constexpr uint32_t kWindowMs = 300000;
 constexpr uint32_t kProgressEvery = 4096;
 constexpr uint32_t kRebootDelayMs = 500;
+constexpr size_t kBeginLen = 101;        // opcode, size, SHA-256, signature
+constexpr size_t kUnsignedBeginLen = 37;  // without the signature: refused with ErrSignature 0
 
 // Where the image goes. Each call returns 0 or an esp_err_t. finish() validates the image and makes
 // it the boot image; it releases the transfer whether or not it succeeds.
@@ -56,7 +59,8 @@ class FlashSink {
 
 class Session {
  public:
-  explicit Session(FlashSink& sink) : sink_(sink) {}
+  // publicKey: the 32-byte Ed25519 key images must be signed with; must outlive the session.
+  Session(FlashSink& sink, const uint8_t* publicKey) : sink_(sink), publicKey_(publicKey) {}
 
   void openWindow(uint32_t nowMs);  // opens, or moves the deadline to now + 5 min
   bool windowOpen() const { return open_; }
@@ -81,6 +85,7 @@ class Session {
   Notice finish(uint32_t nowMs);
 
   FlashSink& sink_;
+  const uint8_t* publicKey_;
   bool open_ = false;
   uint32_t deadlineMs_ = 0;
   bool active_ = false;

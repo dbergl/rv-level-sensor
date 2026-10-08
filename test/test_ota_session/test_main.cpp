@@ -4,6 +4,8 @@
 
 #include "ota_session.h"
 #include "ota_sha256.h"
+#include "monocypher-ed25519.h"
+#include "ota_signature.h"
 
 using namespace ota;
 
@@ -33,6 +35,15 @@ struct FakeSink : FlashSink {
 
 static FakeSink sink;
 
+static uint8_t gSecret[64], gPublic[32];   // the "owner" key
+static uint8_t gOtherSecret[64], gOtherPublic[32];
+
+static void keyFromSeed(uint8_t first, uint8_t secret[64], uint8_t pub[32]) {
+  uint8_t seed[32];
+  for (int i = 0; i < 32; ++i) seed[i] = uint8_t(first + i);
+  crypto_ed25519_key_pair(secret, pub, seed);
+}
+
 void setUp() { sink = FakeSink(); }
 void tearDown() {}
 
@@ -46,7 +57,8 @@ static void put32(std::vector<uint8_t>& v, uint32_t x) {
   for (int i = 0; i < 4; ++i) v.push_back(uint8_t(x >> (8 * i)));
 }
 
-static std::vector<uint8_t> beginCmd(const std::vector<uint8_t>& img, bool badHash = false) {
+static std::vector<uint8_t> beginCmd(const std::vector<uint8_t>& img, bool badHash = false,
+                                     const uint8_t* secret = gSecret) {
   std::vector<uint8_t> v{op::BEGIN};
   put32(v, uint32_t(img.size()));
   uint8_t h[32];
@@ -55,6 +67,10 @@ static std::vector<uint8_t> beginCmd(const std::vector<uint8_t>& img, bool badHa
   s.final(h);
   if (badHash) h[0] ^= 1;
   v.insert(v.end(), h, h + 32);
+  uint8_t m[kSignedMessageLen], sig[64];
+  signedMessage(uint32_t(img.size()), h, m);
+  crypto_ed25519_sign(sig, secret, m, sizeof m);
+  v.insert(v.end(), sig, sig + 64);
   return v;
 }
 
@@ -97,7 +113,7 @@ void test_pack_notice() {
 }
 
 void test_closed_window_rejects_everything() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(100);
   assertNotice(Code::ErrWindowClosed, 0, control(s, beginCmd(img)));
   auto w = dataCmd(0, img, 10);
@@ -108,7 +124,7 @@ void test_closed_window_rejects_everything() {
 }
 
 void test_happy_path() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(10000);
   s.openWindow(0);
   assertNotice(Code::Ok, 0, control(s, beginCmd(img)));
@@ -129,7 +145,7 @@ void test_happy_path() {
 // The loop's `now` can be read just before FINISH lands on the Bluetooth task, so it may be a
 // little older than the DONE time: that must not look like a reboot 49 days overdue.
 void test_reboot_not_due_for_a_time_before_done() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(100);
   s.openWindow(0);
   control(s, beginCmd(img));
@@ -141,7 +157,7 @@ void test_reboot_not_due_for_a_time_before_done() {
 }
 
 void test_after_done_everything_is_refused() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(100);
   s.openWindow(0);
   control(s, beginCmd(img));
@@ -153,7 +169,7 @@ void test_after_done_everything_is_refused() {
 }
 
 void test_window_expires_and_aborts() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(10000);
   s.openWindow(0);
   control(s, beginCmd(img), 1000);  // extends the deadline to 301000
@@ -167,7 +183,7 @@ void test_window_expires_and_aborts() {
 }
 
 void test_writes_extend_window() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(10000);
   s.openWindow(0);
   control(s, beginCmd(img), 0);
@@ -179,7 +195,7 @@ void test_writes_extend_window() {
 }
 
 void test_reopen_extends() {
-  Session s(sink);
+  Session s(sink, gPublic);
   s.openWindow(0);
   s.openWindow(250000);
   s.tick(300000);
@@ -189,7 +205,7 @@ void test_reopen_extends() {
 }
 
 void test_window_survives_millis_wrap() {
-  Session s(sink);
+  Session s(sink, gPublic);
   const uint32_t t0 = 0xFFFFFFF0u;
   s.openWindow(t0);
   s.tick(t0 + 100000);  // wrapped past zero
@@ -200,7 +216,7 @@ void test_window_survives_millis_wrap() {
 }
 
 void test_seconds_left() {
-  Session s(sink);
+  Session s(sink, gPublic);
   TEST_ASSERT_EQUAL_UINT16(0, s.secondsLeft(0));
   s.openWindow(0);
   TEST_ASSERT_EQUAL_UINT16(300, s.secondsLeft(0));
@@ -210,7 +226,7 @@ void test_seconds_left() {
 }
 
 void test_begin_size_limits() {
-  Session s(sink);
+  Session s(sink, gPublic);
   sink.cap = 1000;
   s.openWindow(0);
   assertNotice(Code::ErrBadSize, 1000, control(s, beginCmd(image(1001))));
@@ -219,7 +235,7 @@ void test_begin_size_limits() {
 }
 
 void test_bad_commands() {
-  Session s(sink);
+  Session s(sink, gPublic);
   s.openWindow(0);
   auto b = beginCmd(image(10));
   b.pop_back();
@@ -235,7 +251,7 @@ void test_bad_commands() {
 }
 
 void test_data_before_begin() {
-  Session s(sink);
+  Session s(sink, gPublic);
   s.openWindow(0);
   auto img = image(10);
   auto w = dataCmd(0, img, 10);
@@ -246,7 +262,7 @@ void test_data_before_begin() {
 }
 
 void test_out_of_order_single_resend_then_recovers() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(3000);
   s.openWindow(0);
   control(s, beginCmd(img));
@@ -265,7 +281,7 @@ void test_out_of_order_single_resend_then_recovers() {
 }
 
 void test_write_past_size_aborts() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(700);
   auto declared = image(600);
   s.openWindow(0);
@@ -278,7 +294,7 @@ void test_write_past_size_aborts() {
 }
 
 void test_finish_early_keeps_transfer() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(1000);
   s.openWindow(0);
   control(s, beginCmd(img));
@@ -290,7 +306,7 @@ void test_finish_early_keeps_transfer() {
 }
 
 void test_hash_mismatch() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(1000);
   s.openWindow(0);
   control(s, beginCmd(img, true));
@@ -305,7 +321,7 @@ void test_hash_mismatch() {
 void test_sink_errors() {
   auto img = image(1000);
   {
-    Session s(sink);
+    Session s(sink, gPublic);
     s.openWindow(0);
     sink.beginErr = 0x1508;  // ESP_ERR_OTA_ROLLBACK_INVALID_STATE: running image still on trial
     assertNotice(Code::ErrFlash, 0x1508, control(s, beginCmd(img)));
@@ -313,7 +329,7 @@ void test_sink_errors() {
   }
   setUp();
   {
-    Session s(sink);
+    Session s(sink, gPublic);
     s.openWindow(0);
     control(s, beginCmd(img));
     sink.writeErr = 0x101;
@@ -323,7 +339,7 @@ void test_sink_errors() {
   }
   setUp();
   {
-    Session s(sink);
+    Session s(sink, gPublic);
     s.openWindow(0);
     control(s, beginCmd(img));
     send(s, img, 0, 1000, 500);
@@ -336,7 +352,7 @@ void test_sink_errors() {
 }
 
 void test_begin_during_transfer_restarts() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(1000);
   s.openWindow(0);
   control(s, beginCmd(img));
@@ -350,7 +366,7 @@ void test_begin_during_transfer_restarts() {
 }
 
 void test_abort_and_close() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(1000);
   s.openWindow(0);
   control(s, beginCmd(img));
@@ -364,7 +380,7 @@ void test_abort_and_close() {
 }
 
 void test_disconnect_aborts_and_next_begin_works() {
-  Session s(sink);
+  Session s(sink, gPublic);
   auto img = image(1000);
   s.openWindow(0);
   control(s, beginCmd(img));
@@ -380,7 +396,55 @@ void test_disconnect_aborts_and_next_begin_works() {
   assertNotice(Code::Done, 1000, one(op::FINISH, s));
 }
 
+void test_unsigned_begin_refused() {
+  Session s(sink, gPublic);
+  s.openWindow(0);
+  auto b = beginCmd(image(1000));
+  b.resize(37);  // the pre-signing BEGIN: opcode, size, hash
+  assertNotice(Code::ErrSignature, 0, control(s, b));
+  TEST_ASSERT_EQUAL(0, sink.begins);
+}
+
+void test_wrong_key_refused() {
+  Session s(sink, gPublic);
+  s.openWindow(0);
+  assertNotice(Code::ErrSignature, 1, control(s, beginCmd(image(1000), false, gOtherSecret)));
+  TEST_ASSERT_EQUAL(0, sink.begins);
+  TEST_ASSERT_EQUAL(0, sink.aborts);
+}
+
+void test_tampered_size_refused() {
+  Session s(sink, gPublic);
+  s.openWindow(0);
+  auto b = beginCmd(image(1000));
+  b[1] = 0xE7;  // size 1000 (03E8h) -> 999 (03E7h); the signature covers the size
+  assertNotice(Code::ErrSignature, 1, control(s, b));
+  TEST_ASSERT_EQUAL(0, sink.begins);
+}
+
+void test_bad_signature_keeps_transfer() {
+  Session s(sink, gPublic);
+  auto img = image(1000);
+  s.openWindow(0);
+  control(s, beginCmd(img));
+  send(s, img, 0, 500, 500);
+  assertNotice(Code::ErrSignature, 1, control(s, beginCmd(img, false, gOtherSecret)));
+  TEST_ASSERT_EQUAL(0, sink.aborts);
+  TEST_ASSERT_TRUE(s.transferring());
+  send(s, img, 500, 1000, 500);
+  assertNotice(Code::Done, 1000, one(op::FINISH, s));
+  TEST_ASSERT_TRUE(sink.data == img);
+}
+
+void test_signed_with_other_session_key_accepted() {
+  Session s(sink, gOtherPublic);  // the key compiled in decides, not a fixed one
+  s.openWindow(0);
+  assertNotice(Code::Ok, 0, control(s, beginCmd(image(10), false, gOtherSecret)));
+}
+
 int main() {
+  keyFromSeed(0, gSecret, gPublic);
+  keyFromSeed(100, gOtherSecret, gOtherPublic);
   UNITY_BEGIN();
   RUN_TEST(test_pack_notice);
   RUN_TEST(test_closed_window_rejects_everything);
@@ -403,5 +467,10 @@ int main() {
   RUN_TEST(test_begin_during_transfer_restarts);
   RUN_TEST(test_abort_and_close);
   RUN_TEST(test_disconnect_aborts_and_next_begin_works);
+  RUN_TEST(test_unsigned_begin_refused);
+  RUN_TEST(test_wrong_key_refused);
+  RUN_TEST(test_tampered_size_refused);
+  RUN_TEST(test_bad_signature_keeps_transfer);
+  RUN_TEST(test_signed_with_other_session_key_accepted);
   return UNITY_END();
 }

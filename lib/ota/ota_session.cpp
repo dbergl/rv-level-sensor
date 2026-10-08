@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "ota_signature.h"
+
 namespace ota {
 namespace {
 
@@ -66,9 +68,12 @@ Notice Session::onControl(const uint8_t* d, size_t len, uint32_t nowMs) {
 }
 
 Notice Session::begin(const uint8_t* d, size_t len) {
-  if (len != 37) return {Code::ErrBadCommand, 0};
-  abortTransfer();
+  if (len == kUnsignedBeginLen) return {Code::ErrSignature, 0};
+  if (len != kBeginLen) return {Code::ErrBadCommand, 0};
   uint32_t size = le32(d + 1);
+  // Checked before anything changes: a refused BEGIN leaves a transfer in progress untouched.
+  if (!verifyImage(publicKey_, size, d + 5, d + 37)) return {Code::ErrSignature, 1};
+  abortTransfer();
   if (size == 0 || size > sink_.capacity()) return {Code::ErrBadSize, sink_.capacity()};
   int32_t err = sink_.begin(size);
   if (err) return {Code::ErrFlash, static_cast<uint32_t>(err)};
