@@ -216,7 +216,7 @@ seconds left in the window, bytes 4– firmware version (ASCII).
 
 | Op | Payload | Effect |
 |---|---|---|
-| 01h BEGIN | size u32, SHA-256 (32 bytes) | Start a transfer to the spare slot. Restarts one in progress |
+| 01h BEGIN | size u32, SHA-256 (32 bytes), Ed25519 signature (64 bytes) | Check the signature, then start a transfer to the spare slot. Restarts one in progress |
 | 02h FINISH | | Check size and SHA-256, validate, set boot slot, notify DONE, restart after 500 ms |
 | 03h ABORT | | Abort the transfer; the window stays open |
 | 04h CLOSE | | Close the window |
@@ -237,6 +237,12 @@ seconds left in the window, bytes 4– firmware version (ASCII).
 | 15h | ERR_INVALID_IMAGE | `esp_err_t` |
 | 16h | ERR_FLASH | `esp_err_t`; transfer aborted |
 | 17h | ERR_BAD_COMMAND | Opcode, or 0 for a bad length |
+| 18h | ERR_SIGNATURE | 0: BEGIN without a signature; 1: signature does not verify |
+
+**Signature.** Ed25519 over 52 bytes: `RV-Level OTA v1` and a NUL (16 bytes), the image size
+(u32), and the image's SHA-256. The public key is built into the firmware. The signature is
+checked before anything is erased, and a refused BEGIN leaves any transfer in progress
+untouched. FINISH then checks that the received data has the signed SHA-256.
 
 **Data write**: offset u32, then image bytes; the whole write must fit in 512 bytes. A write at
 the wrong offset is dropped and answered with one RESEND per gap. Data past `size` gives

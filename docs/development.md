@@ -5,7 +5,7 @@
 ```bash
 pio test -e native                                                          # firmware logic
 uv run --with pytest --with jinja2 --with pyyaml pytest homeassistant/tests # HA package
-uv run --with pytest pytest tools/ota                                       # update protocol, host side
+uv run --with pytest --with cryptography pytest tools/ota                   # update protocol and signing
 ```
 
 ## Hardware tests

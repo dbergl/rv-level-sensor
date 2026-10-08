@@ -152,6 +152,10 @@ openscad -o case/level_case_lid.stl    -D 'part="lid"'    case/level_case.scad
 - **A USB serial driver** for the board, if your operating system does not already have one.
 - Optional: [**uv**](https://docs.astral.sh/uv/), to run the Python test and update tools without
   installing their dependencies yourself.
+- **A firmware signing key.** Bluetooth updates must be signed, and the build embeds your public
+  key. Create the key pair once with `uv run tools/ota/sign.py keygen` (in `~/.config/rv-level/`),
+  and back up `ota_ed25519.pem`: anyone with it can update the sensor, and without it only a
+  USB install can change the key. The firmware build stops if there is no key.
 
 ### Build and test
 
@@ -238,6 +242,12 @@ then:
    The sensor only accepts Bluetooth connections for 5 minutes after one;
 2. sends the image (about 20 s);
 3. waits for the sensor to restart and confirm the new version.
+
+The script signs the image on the build computer with your private key; only the signature goes
+to the Pi. The sensor refuses images signed with any other key.
+
+If the sensor runs firmware from before signed updates, install this version once with
+`tools/ota_deploy.sh -- --unsigned`. After that, unsigned images are refused.
 
 The sensor keeps working on RV-C and Bluetooth during the transfer. Connecting can take several
 tries; the uploader retries up to 10 times.
