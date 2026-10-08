@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("cryptography")
-from cryptography.hazmat.primitives import serialization as ser  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
 
 import ota_proto as p  # noqa: E402

@@ -153,9 +153,9 @@ openscad -o case/level_case_lid.stl    -D 'part="lid"'    case/level_case.scad
 - Optional: [**uv**](https://docs.astral.sh/uv/), to run the Python test and update tools without
   installing their dependencies yourself.
 - **A firmware signing key.** Bluetooth updates must be signed, and the build embeds your public
-  key. Create the key pair once with `uv run tools/ota/sign.py keygen` (in `~/.config/rv-level/`),
-  and back up `ota_ed25519.pem`: anyone with it can update the sensor, and without it only a
-  USB install can change the key. The firmware build stops if there is no key.
+  key. Create the key pair once with `uv run tools/ota/sign.py keygen`, which saves it in
+  `~/.config/rv-level/`, and back up `ota_ed25519.pem`: anyone with it can update the sensor, and
+  without it only a USB install can change the key. The firmware build stops if there is no key.
 
 ### Build and test
 

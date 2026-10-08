@@ -73,13 +73,15 @@ def flash_hint(err: int) -> str:
 def signature_hint(value: int) -> str:
     if value == 0:
         return "the sensor refuses unsigned images; sign it with tools/ota/sign.py"
-    return "the signature does not match the key built into the sensor's firmware"
+    return ("the signature does not match this image, or was made with a key other than the one "
+            "built into the sensor's firmware")
 
 
 def begin_hint(name: str, value: int) -> str:
     """Reply to a signed BEGIN from firmware that predates signing (it expects 37 bytes)."""
     if name == "ERR_BAD_COMMAND" and value == 0:
-        return "the sensor's firmware predates signed updates: install this build once with --unsigned"
+        return ("the sensor's firmware predates signed updates: install this build once with "
+                "--unsigned (tools/ota_deploy.sh -- --unsigned)")
     return ""
 
 

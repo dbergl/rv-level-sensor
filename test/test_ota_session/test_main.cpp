@@ -413,6 +413,14 @@ void test_wrong_key_refused() {
   TEST_ASSERT_EQUAL(0, sink.aborts);
 }
 
+void test_bad_signature_outranks_bad_size() {
+  Session s(sink, gPublic);
+  sink.cap = 1000;
+  s.openWindow(0);
+  assertNotice(Code::ErrSignature, 1, control(s, beginCmd(image(1001), false, gOtherSecret)));
+  TEST_ASSERT_EQUAL(0, sink.begins);
+}
+
 void test_tampered_size_refused() {
   Session s(sink, gPublic);
   s.openWindow(0);
@@ -469,6 +477,7 @@ int main() {
   RUN_TEST(test_disconnect_aborts_and_next_begin_works);
   RUN_TEST(test_unsigned_begin_refused);
   RUN_TEST(test_wrong_key_refused);
+  RUN_TEST(test_bad_signature_outranks_bad_size);
   RUN_TEST(test_tampered_size_refused);
   RUN_TEST(test_bad_signature_keeps_transfer);
   RUN_TEST(test_signed_with_other_session_key_accepted);

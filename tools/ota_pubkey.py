@@ -2,7 +2,7 @@
 firmware updates must be signed with.
 
 The key is read from $OTA_PUBKEY, or ~/.config/rv-level/ota_ed25519.pub (64 hex digits), which
-`uv run tools/ota/sign.py keygen` creates. The build stops if there is none. The output is gitignored.
+`uv run tools/ota/sign.py keygen` creates. The build stops if there is none, or if it is not a usable key. The output is gitignored.
 """
 import os
 import sys
@@ -16,7 +16,9 @@ try:
 except (OSError, ValueError) as e:
     key, err = None, str(e)
 else:
-    err = "" if len(key) == 32 else f"expected 64 hex digits, found {len(key) * 2}"
+    sys.path.insert(0, str(Path(env["PROJECT_DIR"]) / "tools" / "ota"))  # noqa: F821
+    from ed25519_key import check_public_key
+    err = check_public_key(key)
 if err:
     sys.stderr.write(f"\nOTA signing key: cannot use {path}: {err}\n"
                      "Create one with:  uv run tools/ota/sign.py keygen\n\n")
