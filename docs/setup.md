@@ -158,6 +158,7 @@ openscad -o case/level_case_lid.stl    -D 'part="lid"'    case/level_case.scad
   key. Create the key pair once with `uv run tools/ota/sign.py keygen`, which saves it in
   `~/.config/rv-level/`, and back up `ota_ed25519.pem`: anyone with it can update the sensor, and
   without it only a USB install can change the key. The firmware build stops if there is no key.
+  See [Signing key](#signing-key).
 
 ### Build and test
 
@@ -263,6 +264,53 @@ interrupted transfer leaves the old version running.
 **Installing over USB through the Pi.** If the sensor is plugged into the Pi's USB port
 (`/dev/ttyUSB0`), `tools/ota_deploy.sh --usb` builds and flashes it over USB instead. Saved
 settings are kept.
+
+### Signing key
+
+Each builder has their own key; none is kept in the repository. The sensor accepts a Bluetooth
+update only when it is signed with the private key matching the public key in the firmware it
+is running.
+
+| File | Purpose |
+|---|---|
+| `~/.config/rv-level/ota_ed25519.pem` | Private key. Signs updates. Keep it on the build computer and back it up |
+| `~/.config/rv-level/ota_ed25519.pub` | Public key. Built into the firmware |
+
+`uv run tools/ota/sign.py keygen` creates both, and never overwrites an existing key. Two
+environment variables change where they are read from:
+
+| Variable | Used by | Default |
+|---|---|---|
+| `OTA_PUBKEY` | The firmware build: the public key file to embed | `~/.config/rv-level/ota_ed25519.pub` |
+| `OTA_KEY_DIR` | `sign.py`: the directory holding the key pair | `~/.config/rv-level` |
+
+**Turning Bluetooth updates on.** A sensor running a build with `BLE_OTA_DISABLED = true`
+accepts no Bluetooth connections. Install the first build with `BLE_OTA_DISABLED = false` over
+USB ([§6](#first-install-over-usb), or `tools/ota_deploy.sh --usb`). Later builds can go over
+Bluetooth.
+
+**Signing by hand.** `tools/ota_deploy.sh` does this for you. To sign and send an image yourself:
+
+```bash
+uv run tools/ota/sign.py sign .pio/build/esp32/firmware.bin    # writes firmware.bin.sig
+uv run tools/ota/sign.py verify .pio/build/esp32/firmware.bin  # optional check against the .pub
+python ble_ota.py firmware.bin --bus can1                      # on the Pi; reads firmware.bin.sig
+```
+
+`ble_ota.py --sig FILE` names a signature file elsewhere.
+
+**Someone else's firmware, or a lost key.** A sensor running firmware built with another key
+refuses your signed images. Install your own build once over USB; Bluetooth updates then use
+your key.
+
+**Changing keys over Bluetooth.** Build with the new public key and sign with the old private
+key, then make the new pair the default:
+
+```bash
+OTA_KEY_DIR=~/rv-level-newkey uv run tools/ota/sign.py keygen
+OTA_PUBKEY=~/rv-level-newkey/ota_ed25519.pub tools/ota_deploy.sh  # signs with the old key
+mv ~/.config/rv-level ~/.config/rv-level.old && mv ~/rv-level-newkey ~/.config/rv-level
+```
 
 ## 9. Checking the installation
 
