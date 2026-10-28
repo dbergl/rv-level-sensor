@@ -70,8 +70,8 @@ def test_right_hand_drive_mirrors(pitch, roll):
     assert lifts(pitch, roll, side="right") == lifts(pitch, -roll, side="left")
 
 
-@pytest.mark.parametrize("pitch,roll,_lift,_layers", ROWS)
-def test_metric_equals_converted(pitch, roll, _lift, _layers):
+@pytest.mark.parametrize("pitch,roll", [row[:2] for row in ROWS])
+def test_metric_equals_converted(pitch, roll):
     inch = lifts(pitch, roll)
     cm = corner_lifts(pitch, roll, WB * 2.54, TRACK * 2.54, "left")
     assert cm == pytest.approx({c: v * 2.54 for c, v in inch.items()}, abs=0.02)

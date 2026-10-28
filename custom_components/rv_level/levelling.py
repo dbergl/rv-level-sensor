@@ -29,4 +29,5 @@ def block_layers(lift: float, block_height: float, tolerance: float) -> int:
 
 
 def short_on_blocks(layers: dict[str, int], carried: float) -> bool:
+    """True when the blocks needed exceed the blocks carried."""
     return sum(layers.values()) > carried
