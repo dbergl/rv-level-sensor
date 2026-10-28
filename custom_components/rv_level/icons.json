@@ -1,0 +1,41 @@
+{
+  "entity": {
+    "sensor": {
+      "pitch": {
+        "default": "mdi:angle-acute"
+      },
+      "roll": {
+        "default": "mdi:angle-acute"
+      },
+      "lift_fl": {
+        "default": "mdi:arrow-up-bold"
+      },
+      "blocks_fl": {
+        "default": "mdi:layers-triple"
+      },
+      "lift_fr": {
+        "default": "mdi:arrow-up-bold"
+      },
+      "blocks_fr": {
+        "default": "mdi:layers-triple"
+      },
+      "lift_rl": {
+        "default": "mdi:arrow-up-bold"
+      },
+      "blocks_rl": {
+        "default": "mdi:layers-triple"
+      },
+      "lift_rr": {
+        "default": "mdi:arrow-up-bold"
+      },
+      "blocks_rr": {
+        "default": "mdi:layers-triple"
+      }
+    },
+    "binary_sensor": {
+      "level": {
+        "default": "mdi:thumb-up"
+      }
+    }
+  }
+}

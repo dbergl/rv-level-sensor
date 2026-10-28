@@ -1,10 +1,29 @@
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
+from .runtime import RvLevelConfigEntry, RvLevelRuntime
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: RvLevelConfigEntry) -> bool:
+    runtime = RvLevelRuntime(hass, entry)
+    await runtime.async_start()
+    entry.runtime_data = runtime
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Options and number changes recompute in place; no reload.
+    entry.async_on_unload(entry.add_update_listener(_options_updated))
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def _options_updated(hass: HomeAssistant, entry: RvLevelConfigEntry) -> None:
+    await entry.runtime_data.async_recompute()
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: RvLevelConfigEntry) -> bool:
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
+    await entry.runtime_data.async_stop()
     return True

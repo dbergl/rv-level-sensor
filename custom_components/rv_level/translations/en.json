@@ -43,5 +43,70 @@
         "right": "Right"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "pitch": {
+        "name": "Pitch"
+      },
+      "roll": {
+        "name": "Roll"
+      },
+      "lift_fl": {
+        "name": "Lift FL"
+      },
+      "blocks_fl": {
+        "name": "Blocks FL"
+      },
+      "lift_fr": {
+        "name": "Lift FR"
+      },
+      "blocks_fr": {
+        "name": "Blocks FR"
+      },
+      "lift_rl": {
+        "name": "Lift RL"
+      },
+      "blocks_rl": {
+        "name": "Blocks RL"
+      },
+      "lift_rr": {
+        "name": "Lift RR"
+      },
+      "blocks_rr": {
+        "name": "Blocks RR"
+      }
+    },
+    "binary_sensor": {
+      "level": {
+        "name": "Level"
+      },
+      "moving": {
+        "name": "Moving"
+      },
+      "problem": {
+        "name": "Problem"
+      },
+      "short_on_blocks": {
+        "name": "Short On Blocks"
+      }
+    },
+    "number": {
+      "wheelbase": {
+        "name": "Wheelbase"
+      },
+      "track": {
+        "name": "Track"
+      },
+      "block_height": {
+        "name": "Block Height"
+      },
+      "tolerance": {
+        "name": "Tolerance"
+      },
+      "blocks_carried": {
+        "name": "Blocks Carried"
+      }
+    }
   }
 }
