@@ -62,7 +62,7 @@ def test_corner_cards_hidden_on_problem():
 
 
 def test_image_exists():
-    assert (HA / "www" / "rv_level" / "van_top.svg").is_file()
+    assert (HA.parent / "custom_components" / "rv_level" / "van_top.svg").is_file()
 
 
 def test_package_declares_dashboard():

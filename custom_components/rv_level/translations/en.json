@@ -113,6 +113,18 @@
     "yaml_package_loaded": {
       "title": "The RV Level YAML package is still loaded",
       "description": "The RV Level YAML package is still loaded. Remove packages/rv_level.yaml, custom_templates/rv_level.jinja and dashboards/rv_level.yaml from your configuration, then restart Home Assistant."
+    },
+    "mushroom_missing": {
+      "title": "The RV Level dashboard needs Mushroom",
+      "description": "The RV Level dashboard needs the Mushroom cards. Install Mushroom from HACS, then reload the dashboard. The RV Level sensors work without it."
+    },
+    "dashboard_url_taken": {
+      "title": "The RV Level dashboard address is taken",
+      "description": "Another dashboard already uses the address /rv-level, so the RV Level dashboard was not added. If it is the old RV Level YAML dashboard, remove it and restart Home Assistant."
+    },
+    "dashboard_failed": {
+      "title": "The RV Level dashboard could not be added",
+      "description": "The RV Level dashboard could not be added, probably because of a Home Assistant change. The sensors still work. You can add the dashboard by hand from the dashboard YAML in the project's docs."
     }
   }
 }

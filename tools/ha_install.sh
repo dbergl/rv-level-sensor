@@ -17,17 +17,21 @@ else
   exit 2
 fi
 
-src="$(cd "$(dirname "$0")/../homeassistant" && pwd)"
-files=(packages/rv_level.yaml custom_templates/rv_level.jinja dashboards/rv_level.yaml
-       www/rv_level/van_top.svg)
+src="$(cd "$(dirname "$0")/.." && pwd)"
+# source (relative to the repo) -> destination (relative to the HA config dir)
+files=(homeassistant/packages/rv_level.yaml:packages/rv_level.yaml
+       homeassistant/custom_templates/rv_level.jinja:custom_templates/rv_level.jinja
+       homeassistant/dashboards/rv_level.yaml:dashboards/rv_level.yaml
+       custom_components/rv_level/van_top.svg:www/rv_level/van_top.svg)
 
 run() { if [[ -n $host ]]; then ssh "$host" "$1"; else bash -c "$1"; fi; }
 
 run "test -f '$dir/configuration.yaml'" || { echo "no configuration.yaml in $dir" >&2; exit 1; }
 run "cd '$dir' && mkdir -p packages custom_templates dashboards www/rv_level"
-for f in "${files[@]}"; do
-  if [[ -n $host ]]; then scp -q "$src/$f" "$host:$dir/$f"; else cp "$src/$f" "$dir/$f"; fi
-  echo "copied $f"
+for pair in "${files[@]}"; do
+  from=${pair%%:*}; to=${pair#*:}
+  if [[ -n $host ]]; then scp -q "$src/$from" "$host:$dir/$to"; else cp "$src/$from" "$dir/$to"; fi
+  echo "copied $to"
 done
 
 # Enable packages. Only appends when there is no homeassistant: block, so it never has to edit
