@@ -10,7 +10,7 @@
       },
       "vehicle": {
         "title": "Your vehicle",
-        "description": "Measure between the tyre contact points. You can change these later in the integration options.",
+        "description": "Measure between the tyre contact points. You can change these later in the integration options. The dashboard needs the Mushroom cards, so install Mushroom from HACS if you have not already.",
         "data": {
           "wheelbase": "Wheelbase",
           "track": "Track",

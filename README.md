@@ -9,7 +9,8 @@ An ESP32 RV-C node that measures coach pitch and roll with an MPU-6050 and repor
 - over Bluetooth LE as a BTHome v2 broadcast for Home Assistant.
 
 The Home Assistant side is a custom integration installed through HACS
-([usage.md §6](docs/usage.md#6-home-assistant)).
+([usage.md §6](docs/usage.md#6-home-assistant)). Its dashboard needs the Mushroom cards, also
+installed from HACS.
 
 Firmware updates can be sent over Bluetooth when enabled in the build (off by default).
 

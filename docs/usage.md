@@ -203,7 +203,7 @@ zeroing and the sensor's own settings are done from the panel, USB or RV-C.
 ### Installing
 
 1. Make sure Home Assistant has a Bluetooth adapter within range of the sensor. It should
-   discover **RV Level** under **Settings → Devices & services**. Add it there.
+   discover **RV Level** (through BTHome) under **Settings → Devices & services**. Add it there.
 2. Install **Mushroom** from HACS if you don't have it. The dashboard needs it.
 3. In HACS, open **⋮ → Custom repositories**, add this repository's GitHub URL as type
    **Integration**, then install **RV Level** and restart Home Assistant.
@@ -222,7 +222,9 @@ directory:
 - `www/rv_level/`
 
 Restart Home Assistant, then add the integration as above. It takes over the entity IDs the
-package used, so your history and automations keep working.
+package used, so your history and automations keep working. Block height, tolerance and blocks
+carried start at their defaults (the old `input_number` values aren't carried over), so set them
+again on the dashboard. Wheelbase and track are entered while adding the integration.
 
 ### Manual install (without HACS)
 
