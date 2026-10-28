@@ -5,7 +5,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.rv_level.const import DOMAIN
 from custom_components.rv_level.migrate import ISSUE_YAML_PACKAGE_LOADED
 
-from test_entities import _setup
+from conftest import _setup
 
 WANTED = "sensor.rv_level_lift_fl"
 
@@ -73,3 +73,13 @@ async def test_leaves_unrelated_template_entities(hass, bthome_device):
     assert er.async_get(hass).async_get(WANTED).unique_id == "something_else"
     assert _integration_entity(hass, entry) == f"{WANTED}_2"
     assert _issue(hass) is None
+
+
+async def test_user_rename_kept(hass, bthome_device):
+    entry = await _setup(hass, bthome_device)
+    er.async_get(hass).async_update_entity(WANTED, new_entity_id="sensor.front_left_lift")
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _integration_entity(hass, entry) == "sensor.front_left_lift"

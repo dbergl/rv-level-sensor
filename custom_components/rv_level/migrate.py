@@ -1,3 +1,5 @@
+import re
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -43,9 +45,10 @@ async def async_migrate_ids(hass: HomeAssistant, entry: RvLevelConfigEntry) -> b
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         key = reg_entry.unique_id.removeprefix(f"{entry.entry_id}_")
         wanted = WANTED_IDS.get(key)
+        # Only undo the numeric suffix HA adds on a collision, not user renames.
         if (
             wanted is not None
-            and reg_entry.entity_id != wanted
+            and re.fullmatch(rf"{re.escape(wanted)}_\d+", reg_entry.entity_id)
             and registry.async_get(wanted) is None
         ):
             registry.async_update_entity(reg_entry.entity_id, new_entity_id=wanted)

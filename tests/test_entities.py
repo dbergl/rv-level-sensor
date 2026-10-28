@@ -4,7 +4,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.rv_level.const import DOMAIN
 
-from conftest import DEFAULT_ENTITY_IDS as SRC
+from conftest import DEFAULT_ENTITY_IDS as SRC, _set_sources, _setup
 
 CORNER_IDS = [
     f"sensor.rv_level_{kind}_{c}"
@@ -22,49 +22,6 @@ ALL_IDS = (
         for k in ("wheelbase", "track", "block_height", "tolerance", "blocks_carried")
     ]
 )
-
-US_OPTIONS = {
-    "wheelbase": 159,
-    "track": 68.5,
-    "driver_side": "left",
-    "block_height": 1.0,
-    "tolerance": 0.5,
-    "blocks_carried": 10,
-}
-CM_OPTIONS = {
-    "wheelbase": 404,
-    "track": 174,
-    "driver_side": "left",
-    "block_height": 2.5,
-    "tolerance": 1.25,
-    "blocks_carried": 10,
-}
-
-
-def _set_sources(hass, pitch="0", roll="0", level=STATE_ON, moving=STATE_OFF, problem=STATE_OFF):
-    for role, value in (
-        ("pitch", pitch),
-        ("roll", roll),
-        ("level", level),
-        ("moving", moving),
-        ("problem", problem),
-    ):
-        hass.states.async_set(SRC[role], value)
-
-
-async def _setup(hass, bthome_device, unit="in", options=None, roles=None, **sources):
-    device_id = bthome_device(**({"roles": roles} if roles else {}))
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        unique_id="02:00:00:00:30:32",
-        data={"device_id": device_id, "address": "02:00:00:00:30:32", "unit": unit},
-        options=options or (US_OPTIONS if unit == "in" else CM_OPTIONS),
-    )
-    entry.add_to_hass(hass)
-    _set_sources(hass, **sources)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    return entry
 
 
 def _state(hass, entity_id):
