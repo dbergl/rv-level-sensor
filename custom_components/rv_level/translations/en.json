@@ -108,5 +108,11 @@
         "name": "Blocks Carried"
       }
     }
+  },
+  "issues": {
+    "yaml_package_loaded": {
+      "title": "The RV Level YAML package is still loaded",
+      "description": "The RV Level YAML package is still loaded. Remove packages/rv_level.yaml, custom_templates/rv_level.jinja and dashboards/rv_level.yaml from your configuration, then restart Home Assistant."
+    }
   }
 }

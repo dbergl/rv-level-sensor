@@ -1,6 +1,7 @@
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
+from .migrate import async_migrate_ids
 from .runtime import RvLevelConfigEntry, RvLevelRuntime
 
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER]
@@ -11,6 +12,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: RvLevelConfigEntry) -> b
     await runtime.async_start()
     entry.runtime_data = runtime
 
+    await async_migrate_ids(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Options and number changes recompute in place; no reload.
