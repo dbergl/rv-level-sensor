@@ -116,7 +116,7 @@
     },
     "mushroom_missing": {
       "title": "The RV Level dashboard needs Mushroom",
-      "description": "The RV Level dashboard needs the Mushroom cards. Install Mushroom from HACS, then reload the dashboard. The RV Level sensors work without it."
+      "description": "The RV Level dashboard needs the Mushroom cards. Install Mushroom from HACS, then restart Home Assistant. The RV Level sensors work without it."
     },
     "dashboard_url_taken": {
       "title": "The RV Level dashboard address is taken",

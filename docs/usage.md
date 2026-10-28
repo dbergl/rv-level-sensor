@@ -208,7 +208,8 @@ zeroing and the sensor's own settings are done from the panel, USB or RV-C.
 3. In HACS, open **⋮ → Custom repositories**, add this repository's GitHub URL as type
    **Integration**, then install **RV Level** and restart Home Assistant.
 4. Go to **Settings → Devices & services → Add integration** and choose **RV Level**. Pick the
-   BTHome sensor if it asks, and your unit system. **RV Level** appears in the sidebar.
+   sensor if it asks, then enter your wheelbase and track and check the
+   driver's side. **RV Level** appears in the sidebar.
 
 ### Moving from the YAML install
 
@@ -250,7 +251,7 @@ Restart Home Assistant afterwards. Don't run the package and the integration tog
 
 Each wheel shows how many blocks to put under it and the lift. Set your wheelbase, track, block
 height, tolerance and blocks carried on the dashboard or on the **RV Level** device page. The
-lift unit follows Home Assistant's unit system, which you choose when you add the integration.
+lift unit follows Home Assistant's unit system as it is set when you add the integration.
 
 The integration does its own block calculation from these settings. **Keep them the same as the
 sensor's** ([§5](#5-block-leveling)), or Home Assistant and the panel will show different counts.
