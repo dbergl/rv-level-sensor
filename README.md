@@ -8,6 +8,9 @@ An ESP32 RV-C node that measures coach pitch and roll with an MPU-6050 and repor
 - on RV-C as a proprietary per-wheel block-leveling message (1EFBFh) for a touchscreen panel;
 - over Bluetooth LE as a BTHome v2 broadcast for Home Assistant.
 
+The Home Assistant side is a custom integration installed through HACS
+([usage.md §6](docs/usage.md#6-home-assistant)).
+
 Firmware updates can be sent over Bluetooth when enabled in the build (off by default).
 
 ## Documentation
@@ -25,7 +28,9 @@ Firmware updates can be sent over Bluetooth when enabled in the build (off by de
 | `lib/` | Hardware-independent logic: RV-C (`rvc`), attitude and blocks (`level`), BTHome, OTA, LED |
 | `test/` | Host unit tests (`pio test -e native`) |
 | `case/` | OpenSCAD case model and STLs |
-| `homeassistant/` | Home Assistant package, dashboard and tests |
+| `custom_components/` | Home Assistant integration (`rv_level`), installed through HACS |
+| `tests/` | Integration tests (see [Development](docs/development.md)) |
+| `homeassistant/` | Older YAML package, dashboard and tests |
 | `tools/` | Bluetooth update, Home Assistant install, hardware test scripts |
 
 ## Quick start

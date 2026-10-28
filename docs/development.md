@@ -4,9 +4,14 @@
 
 ```bash
 pio test -e native                                                          # firmware logic
-uv run --with pytest --with jinja2 --with pyyaml pytest homeassistant/tests # HA package
+uv run --with pytest --with jinja2 --with pyyaml pytest homeassistant/tests # HA package (YAML)
+uv run --python 3.14 --with-requirements tests/requirements.txt pytest tests # HA integration
 uv run --with pytest --with cryptography pytest tools/ota                   # update protocol and signing
 ```
+
+The integration tests need uv's Python 3.14.2 or newer, because Home Assistant 2026.10
+requires it. A bare `pytest` from the repository root is not configured; use the commands
+above (the integration's config is `tests/pytest.ini`).
 
 ## Hardware tests
 

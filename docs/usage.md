@@ -196,46 +196,81 @@ tolerance the last byte shows the tolerance in force (half the block height).
 ## 6. Home Assistant
 
 The sensor broadcasts pitch and roll over Bluetooth LE in the BTHome format. Home Assistant's
-built-in BTHome integration picks it up, and the project's Home Assistant package adds a
-dashboard with the blocks for each wheel. The Bluetooth broadcast is read-only: zeroing and
-settings are done from the panel, USB or RV-C.
+built-in BTHome integration picks it up, and the project's **RV Level** integration adds the
+blocks for each wheel, its settings and a dashboard. The Bluetooth broadcast is read-only:
+zeroing and the sensor's own settings are done from the panel, USB or RV-C.
 
 ### Installing
 
 1. Make sure Home Assistant has a Bluetooth adapter within range of the sensor. It should
-   discover **RV Level** under **Settings → Devices & services**. Add it **before** installing the
-   package; if you add it later, restart Home Assistant again afterwards.
-2. Install **Mushroom** from HACS if you don't have it.
-3. Copy the files into Home Assistant's configuration directory with the install script, from a
-   clone of this project:
-   ```bash
-   tools/ha_install.sh user@ha-host /path/to/ha/config   # over ssh
-   tools/ha_install.sh /path/to/ha/config                # on the Home Assistant machine
-   ```
-   It also turns on packages in `configuration.yaml`. If your `configuration.yaml` already has a
-   `homeassistant:` section, it asks you to add this line under it yourself:
-   ```yaml
-     packages: !include_dir_named packages
-   ```
-   To copy by hand instead, put each file from the project's `homeassistant/` folder at the same
-   path in the configuration directory.
-4. Restart Home Assistant. **RV Level** appears in the sidebar.
+   discover **RV Level** under **Settings → Devices & services**. Add it there.
+2. Install **Mushroom** from HACS if you don't have it. The dashboard needs it.
+3. In HACS, open **⋮ → Custom repositories**, add this repository's GitHub URL as type
+   **Integration**, then install **RV Level** and restart Home Assistant.
+4. Go to **Settings → Devices & services → Add integration** and choose **RV Level**. Pick the
+   BTHome sensor if it asks, and your unit system. **RV Level** appears in the sidebar.
+
+### Moving from the YAML install
+
+If you installed the older YAML package, remove its files from Home Assistant's configuration
+directory:
+
+- `packages/rv_level.yaml`
+- `custom_templates/rv_level.jinja`
+- `dashboards/rv_level.yaml`
+- `www/rv_level/`
+
+Restart Home Assistant, then add the integration as above. It takes over the entity IDs the
+package used, so your history and automations keep working.
+
+### Manual install (without HACS)
+
+Copy the `custom_components/rv_level/` folder from a clone of this project into the
+`custom_components` folder in Home Assistant's configuration directory. Restart Home Assistant
+and add the integration as in steps 2 and 4 above.
+
+To use the older YAML package instead, `tools/ha_install.sh` copies its files into the
+configuration directory and turns on packages in `configuration.yaml`:
+
+```bash
+tools/ha_install.sh user@ha-host /path/to/ha/config   # over ssh
+tools/ha_install.sh /path/to/ha/config                # on the Home Assistant machine
+```
+
+If your `configuration.yaml` already has a `homeassistant:` section, it asks you to add this line
+under it yourself:
+
+```yaml
+  packages: !include_dir_named packages
+```
+
+Restart Home Assistant afterwards. Don't run the package and the integration together.
 
 ### Using the dashboard
 
-Each wheel shows how many blocks to put under it and the lift in inches. Set your wheelbase,
-track, block height, tolerance and blocks carried in the **Vehicle & blocks** card.
+Each wheel shows how many blocks to put under it and the lift. Set your wheelbase, track, block
+height, tolerance and blocks carried on the dashboard or on the **RV Level** device page. The
+lift unit follows Home Assistant's unit system, which you choose when you add the integration.
 
-The dashboard does its own block calculation from these settings. **Keep them the same as the
-sensor's** ([§5](#5-block-leveling)), or the dashboard and the panel will show different counts.
+The integration does its own block calculation from these settings. **Keep them the same as the
+sensor's** ([§5](#5-block-leveling)), or Home Assistant and the panel will show different counts.
 Home Assistant has no Auto tolerance; set it to half your block height or less.
 
 **Sensor fault** shows when the sensor reports a fault, and also when Home Assistant stops
 hearing it (for example, when the coach's power is off or it is out of range). Home Assistant only
 checks every few minutes, so this takes about 3 minutes to appear.
 
-The package assumes one RV Level sensor. The dashboard is loaded from a file, so Home Assistant
-won't let you edit it in the UI; use **⋮ → Edit → Take control** to make an editable copy.
+The dashboard is managed by the integration and updates with it, so it can't be edited in the UI.
+
+### Adding the dashboard by hand
+
+If the integration could not create the dashboard (Home Assistant shows a repair for it):
+
+1. Go to **Settings → Dashboards → Add dashboard** and create a new one.
+2. Open it, then **⋮ → Edit → ⋮ → Raw configuration editor**.
+3. Paste in the contents of
+   [`custom_components/rv_level/dashboard.yaml`](../custom_components/rv_level/dashboard.yaml)
+   and save.
 
 ## 7. Restarting and factory defaults
 
@@ -310,6 +345,7 @@ Message layouts are in the [protocol reference](protocol.md).
 | Pitch or roll has the wrong sign | The axis map does not match the mounting. See [setup.md §4](setup.md#4-mounting-and-orientation). |
 | Zeroing is rejected | The sensor is moving, or started less than a few seconds ago. Wait for `moving=0` and hold everything still. |
 | Readings drift after moving the sensor | Re-zero it ([§3](#3-zeroing)). |
-| Panel and Home Assistant show different block counts | Their settings differ. Match the Home Assistant helpers to the sensor's ([§6](#using-the-dashboard)). |
+| Panel and Home Assistant show different block counts | Their settings differ. Match the RV Level settings in Home Assistant to the sensor's ([§6](#using-the-dashboard)). |
 | Panel says level but the LED blinks (or the reverse) | Expected near level: they use different rules ([§2](#two-meanings-of-level)). |
+| RV Level dashboard shows "Custom element doesn't exist: mushroom-template-card" | Install **Mushroom** from HACS ([§6](#installing)). |
 | Home Assistant does not find the sensor | Its Bluetooth adapter must be within range. Check `BLE_ENABLED` was not turned off in the build. |
