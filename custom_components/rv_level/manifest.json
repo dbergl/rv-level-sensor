@@ -1,0 +1,15 @@
+{
+  "domain": "rv_level",
+  "name": "RV Level",
+  "version": "0.1.0",
+  "config_flow": true,
+  "single_config_entry": true,
+  "integration_type": "device",
+  "iot_class": "calculated",
+  "dependencies": ["http", "lovelace"],
+  "after_dependencies": ["bthome"],
+  "requirements": [],
+  "codeowners": [],
+  "documentation": "https://github.com/OWNER/rv-level-sensor",
+  "issue_tracker": "https://github.com/OWNER/rv-level-sensor/issues"
+}
