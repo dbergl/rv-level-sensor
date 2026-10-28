@@ -1,8 +1,8 @@
-import pytest
-from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from unittest.mock import patch
 
-from custom_components.rv_level.const import DOMAIN
+import pytest
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 
 from conftest import DEFAULT_ENTITY_IDS as SRC, _set_sources, _setup
 
@@ -145,6 +145,21 @@ async def test_unload(hass, bthome_device):
     await hass.async_block_till_done()
 
     assert _state(hass, "sensor.rv_level_lift_fl") == STATE_UNAVAILABLE
+    hass.states.async_set(SRC["pitch"], "5")
+    await hass.async_block_till_done()
+    assert calls == []
+
+
+async def test_failed_platform_setup_stops_runtime(hass, bthome_device):
+    with patch.object(
+        hass.config_entries, "async_forward_entry_setups", side_effect=RuntimeError("boom")
+    ):
+        entry = await _setup(hass, bthome_device, expect_loaded=False, pitch="1", roll="0")
+    assert entry.state is ConfigEntryState.SETUP_ERROR
+    runtime = entry.runtime_data
+    calls = []
+    runtime.async_add_listener(lambda: calls.append(1))
+
     hass.states.async_set(SRC["pitch"], "5")
     await hass.async_block_till_done()
     assert calls == []

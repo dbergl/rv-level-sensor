@@ -1,7 +1,7 @@
+from homeassistant.const import EVENT_HOMEASSISTANT_START
+from homeassistant.core import CoreState
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
-from pytest_homeassistant_custom_component.common import MockConfigEntry
-
 from custom_components.rv_level.const import DOMAIN
 from custom_components.rv_level.migrate import ISSUE_YAML_PACKAGE_LOADED
 
@@ -83,3 +83,57 @@ async def test_user_rename_kept(hass, bthome_device):
     await hass.async_block_till_done()
 
     assert _integration_entity(hass, entry) == "sensor.front_left_lift"
+
+
+async def test_unload_clears_issue(hass, bthome_device):
+    _template_entry(hass)
+    hass.states.async_set(WANTED, "1.0")
+    entry = await _setup(hass, bthome_device)
+    assert _issue(hass) is not None
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _issue(hass) is None
+
+
+async def test_package_loading_late_at_startup_left_alone(hass, bthome_device):
+    hass.set_state(CoreState.not_running)
+    _template_entry(hass)
+
+    entry = await _setup(hass, bthome_device)
+
+    # The template integration hasn't added its entity yet; nothing is decided.
+    assert er.async_get(hass).async_get(WANTED).platform == "template"
+    assert _integration_entity(hass, entry) == f"{WANTED}_2"
+    assert _issue(hass) is None
+
+    hass.states.async_set(WANTED, "1.0")
+    await hass.async_start()
+    await hass.async_block_till_done()
+
+    assert er.async_get(hass).async_get(WANTED).platform == "template"
+    assert _integration_entity(hass, entry) == f"{WANTED}_2"
+    assert _issue(hass) is not None
+
+
+async def test_orphan_removed_once_started(hass, bthome_device):
+    hass.set_state(CoreState.not_running)
+    _template_entry(hass)
+    # As the entity registry does at startup for entries nothing provided.
+    hass.bus.async_listen_once(
+        EVENT_HOMEASSISTANT_START,
+        lambda _: hass.states.async_set(WANTED, "unavailable", {"restored": True}),
+    )
+
+    entry = await _setup(hass, bthome_device)
+    assert er.async_get(hass).async_get(WANTED).platform == "template"
+    assert _integration_entity(hass, entry) == f"{WANTED}_2"
+
+    await hass.async_start()
+    await hass.async_block_till_done()
+
+    assert _integration_entity(hass, entry) == WANTED
+    assert er.async_get(hass).async_get(WANTED).platform == DOMAIN
+    assert hass.states.get(WANTED).attributes.get("restored") is None
+    assert _issue(hass) is None

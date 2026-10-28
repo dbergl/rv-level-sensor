@@ -84,7 +84,9 @@ def _set_sources(hass, pitch="0", roll="0", level=STATE_ON, moving=STATE_OFF, pr
         hass.states.async_set(DEFAULT_ENTITY_IDS[role], value)
 
 
-async def _setup(hass, bthome_device, unit="in", options=None, roles=None, **sources):
+async def _setup(
+    hass, bthome_device, unit="in", options=None, roles=None, expect_loaded=True, **sources
+):
     device_id = bthome_device(**({"roles": roles} if roles else {}))
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -94,6 +96,6 @@ async def _setup(hass, bthome_device, unit="in", options=None, roles=None, **sou
     )
     entry.add_to_hass(hass)
     _set_sources(hass, **sources)
-    assert await hass.config_entries.async_setup(entry.entry_id)
+    assert await hass.config_entries.async_setup(entry.entry_id) is expect_loaded
     await hass.async_block_till_done()
     return entry

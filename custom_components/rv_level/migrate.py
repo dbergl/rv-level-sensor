@@ -1,6 +1,6 @@
 import re
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
@@ -28,6 +28,10 @@ async def async_migrate_ids(hass: HomeAssistant, entry: RvLevelConfigEntry) -> b
     """Take over the YAML package's entity IDs; return True if it is still loaded."""
     registry = er.async_get(hass)
     package_loaded = False
+    # During startup the template integration may not have added its entities
+    # yet, so an entry without a state can't be told apart from an orphan.
+    starting = hass.state is not CoreState.running
+    undecided = False
 
     for key, wanted in WANTED_IDS.items():
         existing = registry.async_get(wanted)
@@ -37,10 +41,15 @@ async def async_migrate_ids(hass: HomeAssistant, entry: RvLevelConfigEntry) -> b
             or existing.unique_id != f"{DOMAIN}_{key}"
         ):
             continue
-        if _provided(hass, wanted):
+        if starting and hass.states.get(wanted) is None:
+            undecided = True
+        elif _provided(hass, wanted):
             package_loaded = True
         else:
             registry.async_remove(wanted)
+            # The registry drops the restored state later, from an event; drop
+            # it now so the ID is free for the rename below.
+            hass.states.async_remove(wanted)
 
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         key = reg_entry.unique_id.removeprefix(f"{entry.entry_id}_")
@@ -62,6 +71,6 @@ async def async_migrate_ids(hass: HomeAssistant, entry: RvLevelConfigEntry) -> b
             severity=ir.IssueSeverity.WARNING,
             translation_key=ISSUE_YAML_PACKAGE_LOADED,
         )
-    else:
+    elif not undecided:
         ir.async_delete_issue(hass, DOMAIN, ISSUE_YAML_PACKAGE_LOADED)
     return package_loaded

@@ -90,6 +90,34 @@ async def test_url_taken_raises_issue(hass, bthome_device):
     assert hass.data[LOVELACE_DATA].dashboards["rv-level"] is other
 
 
+async def test_url_taken_by_other_panel_raises_issue(hass, bthome_device):
+    assert await async_setup_component(hass, "lovelace", {})
+    frontend.async_register_built_in_panel(
+        hass, "iframe", frontend_url_path="rv-level", config={"url": "https://example.com"}
+    )
+
+    entry = await _setup(hass, bthome_device)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert hass.data[frontend.DATA_PANELS]["rv-level"].component_name == "iframe"
+    assert "rv-level" not in hass.data[LOVELACE_DATA].dashboards
+    assert _issue(hass, "dashboard_url_taken") is not None
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert hass.data[frontend.DATA_PANELS]["rv-level"].component_name == "iframe"
+
+
+async def test_own_panel_kept_on_reload(hass, bthome_device):
+    entry = await _setup(hass, bthome_device)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert isinstance(hass.data[LOVELACE_DATA].dashboards["rv-level"], RvLevelDashboard)
+    assert hass.data[frontend.DATA_PANELS]["rv-level"].component_name == "lovelace"
+    assert _issue(hass, "dashboard_url_taken") is None
+
+
 async def test_registration_failure_raises_issue(hass, bthome_device):
     # Lovelace registers its own panel through the same function, so set it up first.
     assert await async_setup_component(hass, "lovelace", {})

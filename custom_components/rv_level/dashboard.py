@@ -74,7 +74,10 @@ async def async_setup_dashboard(hass: HomeAssistant) -> None:
 
         dashboards = hass.data[LOVELACE_DATA].dashboards
         existing = dashboards.get(URL_PATH)
-        if existing is not None and not isinstance(existing, RvLevelDashboard):
+        panel = hass.data.get(frontend.DATA_PANELS, {}).get(URL_PATH)
+        if (existing is not None and not isinstance(existing, RvLevelDashboard)) or (
+            panel is not None and panel.component_name != "lovelace"
+        ):
             _issue(hass, ISSUE_DASHBOARD_URL_TAKEN)
             return
         frontend.async_register_built_in_panel(
