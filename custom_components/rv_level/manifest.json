@@ -9,7 +9,7 @@
   "dependencies": ["http", "lovelace"],
   "after_dependencies": ["bthome"],
   "requirements": [],
-  "codeowners": [],
-  "documentation": "https://github.com/OWNER/rv-level-sensor",
-  "issue_tracker": "https://github.com/OWNER/rv-level-sensor/issues"
+  "codeowners": ["@dbergl"],
+  "documentation": "https://github.com/dbergl/rv-level-sensor",
+  "issue_tracker": "https://github.com/dbergl/rv-level-sensor/issues"
 }

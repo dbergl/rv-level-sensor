@@ -205,7 +205,7 @@ zeroing and the sensor's own settings are done from the panel, USB or RV-C.
 1. Make sure Home Assistant has a Bluetooth adapter within range of the sensor. It should
    discover **RV Level** (through BTHome) under **Settings → Devices & services**. Add it there.
 2. Install **Mushroom** from HACS if you don't have it. The dashboard needs it.
-3. In HACS, open **⋮ → Custom repositories**, add this repository's GitHub URL as type
+3. In HACS, open **⋮ → Custom repositories**, add `https://github.com/dbergl/rv-level-sensor` as type
    **Integration**, then install **RV Level** and restart Home Assistant.
 4. Go to **Settings → Devices & services → Add integration** and choose **RV Level**. Pick the
    sensor if it asks, then enter your wheelbase and track and check the
