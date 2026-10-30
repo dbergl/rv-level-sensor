@@ -27,18 +27,13 @@ def source_entities(hass: HomeAssistant, device_id: str) -> dict[str, str | None
     return found
 
 
-def _is_bthome(hass: HomeAssistant, entry_id: str) -> bool:
-    entry = hass.config_entries.async_get_entry(entry_id)
-    return entry is not None and entry.domain == "bthome"
-
-
 def find_level_devices(hass: HomeAssistant) -> list[dr.DeviceEntry]:
     """BTHome devices that look like an RV Level sensor."""
+    registry = dr.async_get(hass)
     devices = []
-    for device in dr.async_get(hass).devices.values():
-        if not any(_is_bthome(hass, entry_id) for entry_id in device.config_entries):
-            continue
-        entities = source_entities(hass, device.id)
-        if all(entities[role] for role in REQUIRED_ROLES):
-            devices.append(device)
+    for entry in hass.config_entries.async_entries("bthome"):
+        for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+            entities = source_entities(hass, device.id)
+            if all(entities[role] for role in REQUIRED_ROLES):
+                devices.append(device)
     return devices

@@ -12,6 +12,19 @@ def auto_enable_custom_integrations(enable_custom_integrations):
     """Let Home Assistant load custom_components/ in every test."""
 
 
+@pytest.fixture(autouse=True)
+def no_deprecation_reports(caplog):
+    """Fail on HA's warnings that the integration uses a deprecated API."""
+    yield
+    reports = [
+        r.getMessage()
+        for when in ("setup", "call")
+        for r in caplog.get_records(when)
+        if r.name == "homeassistant.helpers.frame" and "rv_level" in r.getMessage()
+    ]
+    assert not reports, reports[0]
+
+
 ALL_ROLES = ("pitch", "roll", "level", "moving", "problem")
 DEFAULT_ENTITY_IDS = {
     "pitch": "sensor.rv_level_3032_rotation",
