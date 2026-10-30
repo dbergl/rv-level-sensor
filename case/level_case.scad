@@ -44,12 +44,12 @@ locator_gap = 0.6;
 locator_depth = 3.7;
 locator_arm = 2;                                        // L-shaped locators flex over the retainer
 retainer_r = 1.0;                                       // retainer bead radius (how far it stands out of the wall)
-retainer_drop = 2.1;                                    // bead centre below the wall top
+retainer_drop = 2.1;                                    // bead center below the wall top
 
 /* [GY-521] */
 gy_size = [15.9, 20.8];     // [along case X (toward its holes), along case Y]
-gy_hole_pitch = 15.5;         // hole centre-to-centre, along case Y
-gy_hole_inset = 2.5;        // hole centre from the board's hole-side edge
+gy_hole_pitch = 15.5;         // hole center-to-center, along case Y
+gy_hole_inset = 2.5;        // hole center from the board's hole-side edge
 gy_standoff_h = 3;          // clears the solder joints under the pin row
 gy_wire_gap = 6;            // room behind the pin row for the soldered wires
 gy_bay_len = 24;            // bay length along case X
@@ -59,14 +59,14 @@ gy_rail_w = 2;
 /* [Lid] */
 lid_t = 2;
 lid_boss_d = 7;
-lid_boss_inset = 3.2;       // boss centre from the inside wall faces (overlaps the walls so they fuse)
+lid_boss_inset = 3.2;       // boss center from the inside wall faces (overlaps the walls so they fuse)
 lid_pilot_d = 2.5;          // M3 self-tapping pilot
 lid_pilot_depth = 10;
 lid_screw_clear_d = 3.4;
 lid_head_d = 6.2;           // M3 flat-head countersink
 label = "RV-C LEVEL";
 term_labels = ["12V", "GND", "CAN H", "CAN L"];  // terminal block, in +Y order
-term_y0 = 14.25;            // 12V terminal centre (outer coordinates), measured from a photo
+term_y0 = 14.25;            // 12V terminal center (outer coordinates), measured from a photo
 term_pitch = 3.5;           // terminal block pitch
 term_label_size = 2.4;      // caps 0.97 x size tall: keeps ~1 mm between rows after the bolding below
 term_label_bold = 0.1;      // strokes widened per side, to ~0.6 mm, so the face-down first layer can resolve them
@@ -78,13 +78,13 @@ foot_flare = 0.1;           // engraving widened per side over the first layer, 
 foot_flare_h = 0.2;         // one first layer
 
 /* [Mounting ears] */
-ear_x = [16, 76];           // ear centres along X (outer coordinates)
+ear_x = [16, 76];           // ear centers along X (outer coordinates)
 ear_w = 16;
 ear_len = 12;               // how far each ear sticks out from the wall
 ear_t = 4;
 ear_hole_d = 4.5;           // #6 / #8 wood screw clearance
 ear_csk_d = 9;
-ear_hole_off = 6.5;         // hole centre from the outside wall face
+ear_hole_off = 6.5;         // hole center from the outside wall face
 
 // ---------------------------------------------------------------- derived
 inner = [gy_bay_len + esp_pocket[0], esp_pocket[1]];
@@ -100,7 +100,7 @@ lid_screws = [[wall + lid_boss_inset, wall + lid_boss_inset],
 locator_x = outer[0] - wall - locator_gap - locator;
 locator_ys = [wall + locator_gap, outer[1] - wall - locator_gap - locator];
 
-// Retainer rods along the inside wall faces where the locators land, centred on the faces at
+// Retainer rods along the inside wall faces where the locators land, centered on the faces at
 // z = 0 (the wall top). r = retainer_r gives the beads; r = retainer_r + fit cuts the grooves.
 module retainer_rods(r) {
   // End wall: one per locator, along Y.
@@ -205,7 +205,7 @@ module lid_engraving() {
     translate([15, 0]) front_arrow();
   }
   for (i = [0 : len(term_labels) - 1])
-    translate([outer[0] - term_label_margin, term_y0 + i * term_pitch - 0.97 * term_label_size / 2])  // capitals centred on the terminal
+    translate([outer[0] - term_label_margin, term_y0 + i * term_pitch - 0.97 * term_label_size / 2])  // capitals centered on the terminal
       offset(r = term_label_bold)
         text(term_labels[i], size = term_label_size, halign = "right", valign = "baseline",
              spacing = term_label_spacing, font = "Liberation Sans:style=Bold");

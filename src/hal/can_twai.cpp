@@ -43,7 +43,7 @@ bool CanTwai::receive(rvc::CanFrame& out, uint32_t timeoutMs) {
   for (;;) {
     TickType_t waited = xTaskGetTickCount() - start;
     esp_err_t err = twai_receive(&m, waited >= timeout ? 0 : timeout - waited);
-    if (err == ESP_ERR_INVALID_STATE) {  // driver not running: still honour the wait
+    if (err == ESP_ERR_INVALID_STATE) {  // driver not running: still honor the wait
       if (waited < timeout) vTaskDelay(timeout - waited);
       return false;
     }

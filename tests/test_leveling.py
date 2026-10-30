@@ -1,6 +1,6 @@
 import pytest
 
-from custom_components.rv_level.levelling import block_layers, corner_lifts, short_on_blocks
+from custom_components.rv_level.leveling import block_layers, corner_lifts, short_on_blocks
 
 WB, TRACK, BLOCK, TOL = 159, 68.5, 1.0, 0.5
 

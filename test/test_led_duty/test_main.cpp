@@ -6,7 +6,7 @@ void setUp() {}
 void tearDown() {}
 
 // The board's RGB LED is common-anode (anode to 3.3 V, cathodes to the GPIOs through 470 R),
-// so a colour is lit while its pin is LOW: pin duty = 255 - brightness.
+// so a color is lit while its pin is LOW: pin duty = 255 - brightness.
 
 void test_off_holds_pin_high() {
   TEST_ASSERT_EQUAL_UINT8(255, ledPinDuty(false, 100));

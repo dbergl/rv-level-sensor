@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 600" width="520" height="600">
   <!-- Top-down Ram ProMaster outline for the RV level dashboard.
-       Front at the top, driver side on the left. Wheel centres sit at
+       Front at the top, driver side on the left. Wheel centers sit at
        ~22 % / 78 % down and ~34 % / 66 % across; corner cards go outside them. -->
   <g fill="none" stroke="#8a8f98" stroke-width="4" stroke-linejoin="round">
     <!-- wheels (drawn first so the body overlaps them) -->

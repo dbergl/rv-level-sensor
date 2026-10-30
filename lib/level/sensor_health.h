@@ -3,7 +3,7 @@
 
 namespace level {
 
-// Tracks consecutive read failures and paces re-initialisation attempts.
+// Tracks consecutive read failures and paces re-initialization attempts.
 class SensorHealth {
  public:
   explicit SensorHealth(uint8_t failLimit = 3, uint32_t retryMs = 2000);

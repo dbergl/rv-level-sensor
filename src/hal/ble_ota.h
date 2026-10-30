@@ -19,7 +19,7 @@ class NimBLECharacteristic;
 class BleOta {
  public:
   BleOta(OtaFlash& flash, BleBthome& adv, const char* version);
-  bool begin();  // after BleBthome::begin (NimBLE initialised)
+  bool begin();  // after BleBthome::begin (NimBLE initialized)
   void openWindow(uint32_t nowMs);
   void poll(uint32_t nowMs);  // closes an expired window, drops the client, sets advertising
   bool rebootDue(uint32_t nowMs);

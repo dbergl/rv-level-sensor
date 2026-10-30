@@ -1,6 +1,6 @@
 """Lift and block-layer maths.
 
-Heights are relative to the centre; +pitch = nose up, +roll = driver side up.
+Heights are relative to the center; +pitch = nose up, +roll = driver side up.
 Wheels can only be raised, so every corner comes up to the highest one.
 """
 

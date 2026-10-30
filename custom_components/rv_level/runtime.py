@@ -17,7 +17,7 @@ from .const import (
     CONF_TRACK,
     CONF_WHEELBASE,
 )
-from .levelling import block_layers, corner_lifts, short_on_blocks
+from .leveling import block_layers, corner_lifts, short_on_blocks
 from .source import source_entities
 
 type RvLevelConfigEntry = ConfigEntry[RvLevelRuntime]

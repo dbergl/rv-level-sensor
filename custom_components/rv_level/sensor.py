@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_UNIT
 from .entity import RvLevelEntity
-from .levelling import CORNERS
+from .leveling import CORNERS
 from .runtime import RvLevelConfigEntry, Snapshot
 
 
