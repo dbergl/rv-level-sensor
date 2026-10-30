@@ -6,10 +6,10 @@
 #   tools/ota_deploy.sh -- --info           # extra arguments go to ble_ota.py
 #   tools/ota_deploy.sh -- --unsigned       # once, if the sensor's firmware predates signed updates
 #
-# Options: --host user@host (default pi@raspberrypi.local), --bus can1.
+# Options: --host user@host (default $RV_LEVEL_HOST, else pi@raspberrypi.local), --bus can1.
 set -euo pipefail
 
-host=pi@raspberrypi.local
+host=${RV_LEVEL_HOST:-pi@raspberrypi.local}
 bus=can1
 usb=0
 extra=()

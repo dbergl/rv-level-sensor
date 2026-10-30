@@ -41,3 +41,7 @@ pio test -e native            # host unit tests
 pio run -e esp32 -t upload    # build and flash over USB
 pio device monitor            # 115200 baud
 ```
+
+## License
+
+[MIT](LICENSE)

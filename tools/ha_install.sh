@@ -3,7 +3,7 @@
 # and enable packages in configuration.yaml if they aren't already.
 #
 #   tools/ha_install.sh /path/to/ha/config                 # HA config on this machine
-#   tools/ha_install.sh pi@my-pi homeassistant/config   # over ssh
+#   tools/ha_install.sh pi@my-pi homeassistant/config            # over ssh
 #
 # Then restart Home Assistant.
 set -euo pipefail

@@ -238,9 +238,9 @@ tools/ota_deploy.sh --host pi@my-pi --bus can1            # build, then update o
 tools/ota_deploy.sh --host pi@my-pi --bus can1 -- --info  # show the running version
 ```
 
-`--host` defaults to `pi@raspberrypi.local` and `--bus` to `can1`. The script builds the firmware,
-copies it and the uploader to the Pi (setting up a Python environment there on the first run),
-then:
+`--host` defaults to `$RV_LEVEL_HOST`, or `pi@raspberrypi.local` if that isn't set, and `--bus`
+to `can1`. The script builds the firmware, copies it and the uploader to the Pi (setting up a
+Python environment there on the first run), then:
 
 1. opens the sensor's update window with an RV-C GENERAL_RESET "Reboot/Enter Bootloader" command.
    The sensor only accepts Bluetooth connections for 5 minutes after one;
