@@ -18,6 +18,14 @@ constexpr uint32_t PITCH_CONFIG_STATUS = 0x1FDE9;
 constexpr uint32_t PITCH_CONFIG_COMMAND = 0x1FDE8;
 constexpr uint32_t ROLL_CONFIG_STATUS = 0x1FDEB;
 constexpr uint32_t ROLL_CONFIG_COMMAND = 0x1FDEA;
+// Air conditioner (Firefly panel, instance 7).
+constexpr uint32_t THERMOSTAT_STATUS_1 = 0x1FFE2;
+constexpr uint32_t THERMOSTAT_COMMAND_1 = 0x1FEF9;
+constexpr uint32_t THERMOSTAT_STATUS_2 = 0x1FEFA;
+constexpr uint32_t THERMOSTAT_COMMAND_2 = 0x1FEF8;
+constexpr uint32_t THERMOSTAT_AMBIENT_STATUS = 0x1FF9C;
+constexpr uint32_t FIREFLY_AC_OPTIONS = 0x0FFA0;         // proprietary, panel -> AC
+constexpr uint32_t FIREFLY_AC_OPTIONS_STATUS = 0x0FFA1;  // proprietary, AC -> panel
 // Proprietary, for the Firefly panel's LEVEL page
 // (docs/protocol.md).
 constexpr uint32_t PROPRIETARY_A2 = 0x1EF00;      // proprietary-A2, destination-specific; carries LEVEL_CONFIG_COMMAND
