@@ -301,8 +301,10 @@ void Node::handleGeneralReset(uint8_t sender, const CanFrame& f, uint32_t nowMs)
     applyThresholds();
     store_.saveSettings(settings_);
     wheelSeeded_ = false;
-    cfgPending_[kPitch] = cfgPending_[kRoll] = true;  // spec 6.2.1: report the configuration
-    sendWheelConfig();
+    if (cfg_.leveling) {
+      cfgPending_[kPitch] = cfgPending_[kRoll] = true;  // spec 6.2.1: report the configuration
+      sendWheelConfig();
+    }
   }
   sendAck(r.ackCode, sender, dgn::GENERAL_RESET);
   if (r.ackCode != ack::OK) return;

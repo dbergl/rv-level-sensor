@@ -939,7 +939,9 @@ void test_no_leveling_sends_no_leveling_dgns() {
   c.leveling = false;
   Node n(c, Settings{}, bus, store);
   claim(n);
-  for (uint32_t t = 260; t <= 5260; t += 10) n.update(SensorSnapshot{}, t);
+  SensorSnapshot bad;
+  bad.faulted = true;  // an IMU fault must not raise the lamp when leveling is off
+  for (uint32_t t = 260; t <= 5260; t += 10) n.update(bad, t);
   TEST_ASSERT_EQUAL(0, bus.count(dgn::LEVELING_SENSOR_STATUS));
   TEST_ASSERT_EQUAL(0, bus.count(dgn::LEVEL_WHEEL_STATUS));
   TEST_ASSERT_EQUAL(0, bus.count(dgn::PITCH_CONFIG_STATUS));
@@ -957,6 +959,20 @@ void test_no_leveling_ignores_config_and_block_commands() {
   n.onFrame(blockCommand(0xFF, {0x4C, 0x56, 0x02, 0x14, 0x0C, 0x19, 0xFF, 0xFF}), 300);
   TEST_ASSERT_EQUAL(0, bus.frames.size());
   TEST_ASSERT_EQUAL(0, store.settingsSaves);
+}
+
+void test_no_leveling_general_reset_sends_only_the_ack() {
+  NodeConfig c = config();
+  c.leveling = false;
+  Node n(c, Settings{}, bus, store);
+  claim(n);
+  n.onFrame(generalReset(SA, 0xDF, 0xFF), 300);  // restore defaults
+  n.update(SensorSnapshot{}, 310);
+  TEST_ASSERT_EQUAL_HEX8(ack::OK, bus.withDgn(dgn::ACK | TOOL)[0].data[0]);
+  TEST_ASSERT_EQUAL(0, bus.count(dgn::LEVEL_WHEEL_STATUS));
+  TEST_ASSERT_EQUAL(0, bus.count(dgn::PITCH_CONFIG_STATUS));
+  TEST_ASSERT_EQUAL(0, bus.count(dgn::ROLL_CONFIG_STATUS));
+  TEST_ASSERT_EQUAL(0, bus.count(dgn::LEVELING_SENSOR_STATUS));
 }
 
 int main() {
@@ -1035,5 +1051,6 @@ int main() {
   RUN_TEST(test_no_leveling_claims_and_answers_product_id);
   RUN_TEST(test_no_leveling_sends_no_leveling_dgns);
   RUN_TEST(test_no_leveling_ignores_config_and_block_commands);
+  RUN_TEST(test_no_leveling_general_reset_sends_only_the_ack);
   return UNITY_END();
 }
