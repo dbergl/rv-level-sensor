@@ -19,25 +19,37 @@ class NimBLEAdvertisedDeviceCallbacks;
 // to its status notifications (ffe1) and writes commands to ffe2 with response. Writes come only
 // from the Bridge, which enforces the allow-list. Reconnects with ac::Backoff.
 //
+// Binding: the strongest "KT..." device from a scan is only a candidate. It is connected the normal
+// way and becomes the bound unit (takeNewBinding, for NVS) only once its AC service is found and
+// the bridge has decoded a status frame from it within kVerifyMs. Otherwise it is dropped, logged,
+// and never connected again.
+//
 // Tasks: the loop task owns the state machine (poll) and the Bridge. NimBLE's connect and
 // discovery calls block until the radio answers, so they run on a small worker task the loop
 // kicks. Notifications arrive on the NimBLE host task and reach the bridge through a lock-guarded
-// byte ring; a disconnect is flagged the same way. write() queues a GATT write request and
-// returns: the response is not waited for, the unit's next status frame is the truth.
+// byte ring; a disconnect and write completions are flagged the same way. write() queues a GATT
+// write request and returns; one may be outstanding at a time.
+//
+// Addresses stay in NimBLE's native byte order throughout (see ac::formatAddress).
 class BleUnitLink : public ac::IUnitLink {
  public:
   static constexpr uint32_t kScanSeconds = 10;
   static constexpr uint8_t kConnectTimeoutS = 5;
+  static constexpr uint32_t kVerifyMs = 5000;       // candidate: connected to first status frame
+  static constexpr uint32_t kDisconnectWaitMs = 10000;  // fallback if a disconnect event never comes
+
+  // Native byte order (getNative()), the order NVS holds.
+  static NimBLEAddress fromNative(const uint8_t addr[6], uint8_t type);
 
   explicit BleUnitLink(BleServer& server) : server_(server) {}
   // After BleServer::begin. Binds nothing: main passes the stored address to bindTo.
   bool begin(ac::Bridge& b);
   void bindTo(const NimBLEAddress& a);  // the only unit ever connected to
-  void forget();                         // drops the link and the binding
+  void forget();                         // drops the link, the binding and any candidate
   bool bound() const { return bound_; }
-  // Scans kScanSeconds for "KT..." names and binds the strongest, if nothing is bound. Logged.
+  // Scans kScanSeconds for "KT..." names and tries the strongest, if nothing is bound. Logged.
   void startBindScan(uint32_t nowMs);
-  // A unit bound by the scan since the last call, for main to store.
+  // A candidate verified since the last call, for main to store (native byte order).
   bool takeNewBinding(uint8_t addr[6], uint8_t& type);
   void poll(uint32_t nowMs);
 
@@ -48,6 +60,7 @@ class BleUnitLink : public ac::IUnitLink {
   void onNotify(const uint8_t* d, size_t n);
   void onDisconnect() { dropped_ = true; }
   void onScanResult(const char* name, size_t len, const uint8_t addr[6], uint8_t type, int rssi);
+  void onWriteDone(uint16_t status);
 
  private:
   enum class State : uint8_t { Idle, Reserving, Connecting, Up };
@@ -61,9 +74,12 @@ class BleUnitLink : public ac::IUnitLink {
 
   static void workerMain(void* self);
   bool connectAndSubscribe();  // worker task
+  bool wanted() const { return bound_ || candidate_; }
+  bool readyToConnect(uint32_t nowMs);
   void drain(uint32_t nowMs);
   void pollScan(uint32_t nowMs);
-  void linkDown(uint32_t nowMs, const char* why);
+  void linkDown(uint32_t nowMs, bool established, const char* why);
+  void reject(uint32_t nowMs, bool established, const char* reason);
 
   BleServer& server_;
   ac::Bridge* bridge_ = nullptr;
@@ -75,7 +91,9 @@ class BleUnitLink : public ac::IUnitLink {
   // Host task -> loop.
   ac::ByteRing<128> ring_;
   ac::BindPicker picker_;
-  std::atomic<bool> dropped_{false};  // the unit link disconnected
+  std::atomic<bool> dropped_{false};     // the unit link disconnected
+  std::atomic<bool> writeBusy_{false};   // a write request awaits its response
+  std::atomic<uint16_t> writeError_{0};  // last failed write's status, for the loop to log
 
   // Loop -> worker -> loop. The loop writes target_ only while no job runs; the worker writes the
   // handles before setting Job::Ok.
@@ -87,9 +105,14 @@ class BleUnitLink : public ac::IUnitLink {
   // Loop task only.
   State state_ = State::Idle;
   bool bound_ = false;
+  bool candidate_ = false;  // addr_ is a scan candidate still being verified
+  char candName_[ac::BindPicker::kNameMax + 1] = {};
+  uint32_t verifyUntilMs_ = 0;
   NimBLEAddress addr_;
   ac::Backoff backoff_;
   uint32_t nextTryMs_ = 0;
+  bool awaitDrop_ = false;  // an established link was told to disconnect; wait for the event
+  uint32_t awaitDropUntilMs_ = 0;
   bool scanWanted_ = false;
   bool scanning_ = false;
   uint32_t scanStartMs_ = 0;

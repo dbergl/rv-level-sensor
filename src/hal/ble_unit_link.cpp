@@ -17,6 +17,11 @@ constexpr uint32_t kScanGraceMs = 5000;  // stop a scan that overran its duratio
 
 bool due(uint32_t nowMs, uint32_t atMs) { return static_cast<int32_t>(nowMs - atMs) >= 0; }
 
+struct AddrText {
+  explicit AddrText(const NimBLEAddress& a) { ac::formatAddress(a.getNative(), s); }
+  char s[ac::kAddrTextLen];
+};
+
 class ClientCb : public NimBLEClientCallbacks {
  public:
   explicit ClientCb(BleUnitLink& l) : l_(l) {}
@@ -40,10 +45,20 @@ class ScanCb : public NimBLEAdvertisedDeviceCallbacks {
   BleUnitLink& l_;
 };
 
-// The response only says the write landed; the next status frame says what the unit did.
-int onWriteDone(uint16_t, const ble_gatt_error*, ble_gatt_attr*, void*) { return 0; }
+int writeDone(uint16_t, const ble_gatt_error* error, ble_gatt_attr*, void* arg) {
+  static_cast<BleUnitLink*>(arg)->onWriteDone(error != nullptr ? error->status : 0);
+  return 0;
+}
 
 }  // namespace
+
+// Not the uint8_t[6] constructor: that one reverses the bytes (bluedroid order).
+NimBLEAddress BleUnitLink::fromNative(const uint8_t addr[6], uint8_t type) {
+  ble_addr_t a;
+  a.type = type;
+  std::memcpy(a.val, addr, 6);
+  return NimBLEAddress(a);
+}
 
 bool BleUnitLink::begin(ac::Bridge& b) {
   bridge_ = &b;
@@ -61,6 +76,7 @@ bool BleUnitLink::begin(ac::Bridge& b) {
 void BleUnitLink::bindTo(const NimBLEAddress& a) {
   addr_ = a;
   bound_ = true;
+  candidate_ = false;
   scanWanted_ = false;
   backoff_.reset();
   nextTryMs_ = millis();
@@ -68,14 +84,15 @@ void BleUnitLink::bindTo(const NimBLEAddress& a) {
 
 void BleUnitLink::forget() {
   bound_ = false;
+  candidate_ = false;
   newBinding_ = false;
-  if (state_ == State::Up || state_ == State::Reserving) linkDown(millis(), nullptr);
+  if (state_ == State::Up || state_ == State::Reserving) linkDown(millis(), state_ == State::Up, nullptr);
   // Connecting: poll() drops the link once the worker is done.
 }
 
 void BleUnitLink::startBindScan(uint32_t) {
   if (bound_) {
-    Serial.printf("AC unit already bound to %s (forget-ac to bind another)\n", addr_.toString().c_str());
+    Serial.printf("AC unit already bound to %s (forget-ac to bind another)\n", AddrText(addr_).s);
     return;
   }
   if (worker_ == nullptr) return;
@@ -93,9 +110,18 @@ bool BleUnitLink::takeNewBinding(uint8_t addr[6], uint8_t& type) {
 bool BleUnitLink::connected() const { return state_ == State::Up && !dropped_.load(); }
 
 bool BleUnitLink::write(const uint8_t* d, size_t n) {
-  if (!connected()) return false;
+  if (!connected() || writeBusy_.exchange(true)) return false;  // one ATT request at a time
   // Queued in the host and sent at the next connection event; never blocks the loop.
-  return ble_gattc_write_flat(connHandle_, writeHandle_, d, static_cast<uint16_t>(n), onWriteDone, nullptr) == 0;
+  if (ble_gattc_write_flat(connHandle_, writeHandle_, d, static_cast<uint16_t>(n), writeDone, this) == 0) {
+    return true;
+  }
+  writeBusy_ = false;
+  return false;
+}
+
+void BleUnitLink::onWriteDone(uint16_t status) {
+  if (status != 0) writeError_ = status;
+  writeBusy_ = false;
 }
 
 void BleUnitLink::onNotify(const uint8_t* d, size_t n) {
@@ -145,7 +171,11 @@ void BleUnitLink::drain(uint32_t nowMs) {
   }
 }
 
-void BleUnitLink::linkDown(uint32_t nowMs, const char* why) {
+// established: connect() succeeded, so NimBLE reports the disconnect (onDisconnect) and the next
+// attempt waits for it rather than have a late event spoil that attempt.
+void BleUnitLink::linkDown(uint32_t nowMs, bool established, const char* why) {
+  awaitDrop_ = (established || client_->isConnected()) && !dropped_.load();
+  awaitDropUntilMs_ = nowMs + kDisconnectWaitMs;
   if (client_->isConnected()) client_->disconnect();
   server_.setClientLinks(0);
   state_ = State::Idle;
@@ -155,12 +185,26 @@ void BleUnitLink::linkDown(uint32_t nowMs, const char* why) {
   }
 }
 
+void BleUnitLink::reject(uint32_t nowMs, bool established, const char* reason) {
+  Serial.printf("AC candidate %s %s rejected: %s\n", candName_, AddrText(addr_).s, reason);
+  candidate_ = false;  // never tried again; 'pair' scans afresh
+  linkDown(nowMs, established, nullptr);
+}
+
+bool BleUnitLink::readyToConnect(uint32_t nowMs) {
+  if (!wanted() || scanning_ || !due(nowMs, nextTryMs_) || client_->isConnected()) return false;
+  if (awaitDrop_ && !dropped_.load() && !due(nowMs, awaitDropUntilMs_)) return false;
+  awaitDrop_ = false;
+  return true;
+}
+
 void BleUnitLink::poll(uint32_t nowMs) {
   if (worker_ == nullptr) return;  // begin() failed
   drain(nowMs);
+  if (uint16_t err = writeError_.exchange(0)) Serial.printf("AC unit write failed (status 0x%X)\n", err);
   switch (state_) {
     case State::Idle:
-      if (bound_ && !scanning_ && due(nowMs, nextTryMs_)) {
+      if (readyToConnect(nowMs)) {
         // Count our link before connecting: BleServer::poll (later this loop) stops connectable
         // advertising and frees a server slot if needed, so the connect has a slot.
         server_.setClientLinks(1);
@@ -170,6 +214,7 @@ void BleUnitLink::poll(uint32_t nowMs) {
     case State::Reserving:
       target_ = addr_;
       dropped_ = false;
+      writeBusy_ = false;
       {
         Lock l(mu_);
         ring_.clear();
@@ -182,17 +227,40 @@ void BleUnitLink::poll(uint32_t nowMs) {
       Job j = job_.load();
       if (j == Job::Running) break;
       job_ = Job::None;
-      if (j == Job::Ok && bound_ && !dropped_.load()) {
+      bool ok = j == Job::Ok;
+      if (ok && wanted() && !dropped_.load()) {
         state_ = State::Up;
-        backoff_.reset();
-        Serial.printf("AC unit %s connected\n", addr_.toString().c_str());
+        if (candidate_) {
+          verifyUntilMs_ = nowMs + kVerifyMs;
+        } else {
+          backoff_.reset();
+          Serial.printf("AC unit %s connected\n", AddrText(addr_).s);
+        }
+      } else if (candidate_) {
+        reject(nowMs, ok, "no connection or no AC service (ffe0/ffe1/ffe2)");
       } else {
-        linkDown(nowMs, "AC unit connect failed");
+        linkDown(nowMs, ok, "AC unit connect failed");
       }
       break;
     }
     case State::Up:
-      if (dropped_.load()) linkDown(nowMs, "AC unit disconnected");
+      if (dropped_.load()) {
+        if (candidate_) {
+          reject(nowMs, true, "disconnected before a status frame");
+        } else {
+          linkDown(nowMs, true, "AC unit disconnected");
+        }
+      } else if (candidate_) {
+        if (bridge_->responding(nowMs)) {
+          candidate_ = false;
+          bound_ = true;
+          newBinding_ = true;
+          backoff_.reset();
+          Serial.printf("AC unit bound: %s %s\n", candName_, AddrText(addr_).s);
+        } else if (due(nowMs, verifyUntilMs_)) {
+          reject(nowMs, true, "no valid status frame within 5 s");
+        }
+      }
       break;
   }
   pollScan(nowMs);
@@ -211,17 +279,23 @@ void BleUnitLink::pollScan(uint32_t nowMs) {
       Lock l(mu_);
       found = picker_.best(c);
     }
-    if (bound_) return;  // bound some other way meanwhile
+    if (wanted()) return;  // bound some other way meanwhile
     if (!found) {
       Serial.println("no AC unit (KT...) found; is it powered, and free of other apps? 'pair' to retry");
       return;
     }
-    bindTo(NimBLEAddress(c.addr, c.type));
-    newBinding_ = true;
-    Serial.printf("AC unit bound: %s %s (RSSI %d dBm)\n", c.name, addr_.toString().c_str(), c.rssi);
+    addr_ = fromNative(c.addr, c.type);
+    std::memcpy(candName_, c.name, sizeof candName_);
+    candidate_ = true;
+    backoff_.reset();
+    nextTryMs_ = nowMs;
+    Serial.printf("AC candidate %s %s (RSSI %d dBm): connecting to verify\n", candName_, AddrText(addr_).s, c.rssi);
     return;
   }
-  if (!scanWanted_ || bound_ || state_ != State::Idle || job_.load() != Job::None) return;
+  if (wanted() || state_ != State::Idle || job_.load() != Job::None) {
+    if (wanted()) scanWanted_ = false;  // a candidate is only ever tried once per 'pair'
+    return;
+  }
   scanWanted_ = false;
   {
     Lock l(mu_);

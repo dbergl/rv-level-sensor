@@ -1,5 +1,7 @@
 #include "link_policy.h"
 
+#include <cstdio>
+
 namespace ac {
 
 uint32_t Backoff::next() {
@@ -27,6 +29,11 @@ bool BindPicker::best(Candidate& out) const {
   if (!found_) return false;
   out = best_;
   return true;
+}
+
+void formatAddress(const uint8_t native[6], char out[kAddrTextLen]) {
+  std::snprintf(out, kAddrTextLen, "%02X:%02X:%02X:%02X:%02X:%02X", native[5], native[4], native[3], native[2],
+                native[1], native[0]);
 }
 
 }  // namespace ac

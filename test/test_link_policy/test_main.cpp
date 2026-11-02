@@ -118,6 +118,26 @@ void test_ring_full_drops_newest() {
   TEST_ASSERT_EQUAL_size_t(0, r.pop(out, 4));
 }
 
+void test_address_shown_most_significant_first() {
+  const uint8_t native[6] = {0x9A, 0x78, 0x56, 0x34, 0x12, 0x02};  // as NimBLE stores it
+  char text[kAddrTextLen];
+  formatAddress(native, text);
+  TEST_ASSERT_EQUAL_STRING("02:12:34:56:78:9A", text);
+}
+
+void test_picker_keeps_native_byte_order() {
+  // scan -> candidate -> NVS -> connect must never reorder the bytes.
+  const uint8_t native[6] = {0x9A, 0x78, 0x56, 0x34, 0x12, 0x02};
+  BindPicker p;
+  p.offer("KT1", 3, native, 1, -50);
+  BindPicker::Candidate c;
+  TEST_ASSERT_TRUE(p.best(c));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(native, c.addr, 6);
+  char text[kAddrTextLen];
+  formatAddress(c.addr, text);
+  TEST_ASSERT_EQUAL_STRING("02:12:34:56:78:9A", text);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_backoff_doubles_from_1s_to_30s);
@@ -130,5 +150,7 @@ int main() {
   RUN_TEST(test_picker_truncates_long_name_and_resets);
   RUN_TEST(test_ring_fifo_and_wrap);
   RUN_TEST(test_ring_full_drops_newest);
+  RUN_TEST(test_address_shown_most_significant_first);
+  RUN_TEST(test_picker_keeps_native_byte_order);
   return UNITY_END();
 }

@@ -289,7 +289,7 @@ void setup() {
       Serial.println("AC unit link init failed");
     } else {
       unitLinkUp = true;
-      if (haveUnit) unitLink.bindTo(NimBLEAddress(addr, type));
+      if (haveUnit) unitLink.bindTo(BleUnitLink::fromNative(addr, type));
     }
     if (!haveUnit && !haveHa) openPairWindow(millis());  // first boot: nothing to pair with yet
   }

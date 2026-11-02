@@ -41,6 +41,11 @@ class BindPicker {
   bool found_ = false;
 };
 
+// Bluetooth addresses are kept in NimBLE's native order everywhere (scan, NVS, connect): least
+// significant byte first, as on the air. Display order is the reverse: "02:12:34:56:78:9A".
+constexpr size_t kAddrTextLen = 18;  // 17 characters and the terminator
+void formatAddress(const uint8_t native[6], char out[kAddrTextLen]);
+
 // Fixed byte FIFO. Full: the newest bytes are dropped; the frame assembler resyncs on 5A 5A.
 template <size_t N>
 class ByteRing {
