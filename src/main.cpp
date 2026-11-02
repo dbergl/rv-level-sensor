@@ -9,6 +9,7 @@
 #include "config.h"
 #include "fw_version.h"
 #include "hal/ble_bthome.h"
+#include "hal/ble_ha_service.h"
 #include "hal/ble_ota.h"
 #include "hal/ble_server.h"
 #include "hal/ble_unit_link.h"
@@ -51,7 +52,9 @@ BleUnitLink unitLink(bleServer);
 ac::Bridge bridge(unitLink);
 rvc::AcPanel acPanel(bridge, can);
 PairWindow pairWindow;
+BleHaService haService(bleServer, bridge, store, pairWindow);
 bool unitLinkUp = false;  // BleUnitLink::begin succeeded
+bool haServiceUp = false;  // BleHaService::begin succeeded
 bool pairWasOpen = false;
 bool onTrial = false;       // booted a new image that hasn't confirmed itself yet
 bool imuValidSeen = !cfg::LEVELING_ENABLED;  // part of the trial's health check; no IMU to wait for without leveling
@@ -158,7 +161,7 @@ void openPairWindow(uint32_t now) {
 
 void forgetHa() {
   store.clearHaKey();
-  // The HA service (Task 9) must also drop its current session here.
+  if (haServiceUp) haService.forget();
   Serial.println("Home Assistant pairing cleared");
 }
 
@@ -263,7 +266,9 @@ void setup() {
     }
   }
   if constexpr (cfg::BLE_ENABLED) {
-    if (!ble.begin(cfg::BLE_NAME, cfg::BLE_ADV_INTERVAL_MS, cfg::BLE_REFRESH_MS, cfg::BLE_REAPPLY_MS, nullptr)) {
+    // AC builds name the HA service in the scan response, so HA can find the board by it.
+    const char* serviceUuid = cfg::AC_BRIDGE_ENABLED ? BleHaService::kServiceUuid : nullptr;
+    if (!ble.begin(cfg::BLE_NAME, cfg::BLE_ADV_INTERVAL_MS, cfg::BLE_REFRESH_MS, cfg::BLE_REAPPLY_MS, serviceUuid)) {
       Serial.println("BLE init failed");
     } else {
       if (kBleServerWanted) {
@@ -290,6 +295,11 @@ void setup() {
     } else {
       unitLinkUp = true;
       if (haveUnit) unitLink.bindTo(BleUnitLink::fromNative(addr, type));
+    }
+    if (!bleServerUp || !haService.begin()) {
+      Serial.println("Home Assistant service init failed");
+    } else {
+      haServiceUp = true;
     }
     if (!haveUnit && !haveHa) openPairWindow(millis());  // first boot: nothing to pair with yet
   }
@@ -353,6 +363,7 @@ void loop() {
     if (unitLinkUp) unitLink.poll(now);  // before bleServer.poll, which acts on its slot reservation
     bridge.tick(now);
     acPanel.update(node->claimed(), node->address(), now);
+    if (haServiceUp) haService.poll(now);  // drains the bridge's results
     uint8_t addr[6], type;
     if (unitLink.takeNewBinding(addr, type)) store.saveUnitAddress(addr, type);
     bool pairOpen = pairWindow.isOpen(now);
