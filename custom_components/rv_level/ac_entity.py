@@ -23,9 +23,13 @@ def fan_option(fan: int | None) -> str | None:
     return FAN_OPTIONS[fan] if fan is not None and 0 <= fan < len(FAN_OPTIONS) else None
 
 
+def in_preset(status: AcStatus | None) -> bool:
+    return bool(status and status.power and status.mode in PRESETS)
+
+
 def mode_command(status: AcStatus | None, mode: Mode) -> tuple[Op, int]:
     """Mode Cool leaves a preset alone on the unit, so leaving one is ClearPreset."""
-    if mode is Mode.Cool and status and status.power and status.mode in PRESETS:
+    if mode is Mode.Cool and in_preset(status):
         return Op.ClearPreset, 0
     return Op.Mode, int(mode)
 
@@ -53,6 +57,12 @@ class AcEntity(Entity):
         """The unit's report, or None while it isn't responding."""
         status = self.runtime.status
         return status if status is not None and status.responding else None
+
+    @property
+    def running(self) -> AcStatus | None:
+        """The status while on; the mode and fan reported while off aren't trusted."""
+        status = self.status
+        return status if status is not None and status.power else None
 
     async def _command(self, op: Op, value: int) -> None:
         # No optimistic state: the next status from the unit is the truth.

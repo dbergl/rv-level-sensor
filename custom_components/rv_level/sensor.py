@@ -74,7 +74,7 @@ AC_DESCRIPTIONS: tuple[AcSensorDescription, ...] = (
         translation_key="mode",
         device_class=SensorDeviceClass.ENUM,
         options=list(MODE_OPTIONS.values()),
-        value_fn=lambda s: MODE_OPTIONS.get(s.mode),
+        value_fn=lambda s: MODE_OPTIONS.get(s.mode) if s.power else None,
     ),
     AcSensorDescription(
         key="air_temperature",

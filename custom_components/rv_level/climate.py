@@ -15,7 +15,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .ac_entity import FAN_OPTIONS, AcEntity, fan_option
+from .ac_entity import FAN_OPTIONS, AcEntity, fan_option, in_preset
 from .ac_protocol import Mode, Op
 from .ac_runtime import AcConfigEntry
 from .const import KIND_AC, entry_kind
@@ -76,13 +76,13 @@ class AcClimate(AcEntity, ClimateEntity):
 
     @property
     def preset_mode(self) -> str | None:
-        if (s := self.status) is None or s.mode not in MODE_HVAC:
+        if (s := self.running) is None or s.mode not in MODE_HVAC:
             return None
         return MODE_PRESETS.get(s.mode, PRESET_NONE)
 
     @property
     def fan_mode(self) -> str | None:
-        return fan_option(self.status.fan) if self.status else None
+        return fan_option(self.running.fan) if self.running else None
 
     @property
     def target_temperature(self) -> int | None:
@@ -109,7 +109,9 @@ class AcClimate(AcEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         if preset_mode == PRESET_NONE:
-            await self._command(Op.ClearPreset, 0)
+            # Nothing to clear unless a preset is on; ClearPreset would otherwise fail.
+            if in_preset(self.status):
+                await self._command(Op.ClearPreset, 0)
         else:
             await self._command(Op.Mode, PRESET_MODES[preset_mode])
 

@@ -30,7 +30,7 @@ class AcOperatingMode(AcEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        return MODE_OPTIONS.get(self.status.mode) if self.status else None
+        return MODE_OPTIONS.get(self.running.mode) if self.running else None
 
     async def async_select_option(self, option: str) -> None:
         await self._command(*mode_command(self.status, OPTION_MODES[option]))
@@ -45,7 +45,7 @@ class AcFanLevel(AcEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        return fan_option(self.status.fan) if self.status else None
+        return fan_option(self.running.fan) if self.running else None
 
     async def async_select_option(self, option: str) -> None:
         await self._command(Op.Fan, FAN_OPTIONS.index(option))

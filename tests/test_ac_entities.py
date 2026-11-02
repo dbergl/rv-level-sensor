@@ -166,6 +166,29 @@ async def test_climate_state_from_status(hass, runtime):
     assert _state(hass, CLIMATE) == "off"
 
 
+async def test_off_hides_mode_and_fan(hass, runtime):
+    """The mode and fan reported while off aren't trusted; the panel shows neither."""
+    await _push(hass, runtime, status=replace(STATUS, power=False))
+    state = hass.states.get(CLIMATE)
+    assert state.state == "off"
+    assert state.attributes["preset_mode"] is None
+    assert state.attributes["fan_mode"] is None
+    for entity_id in (
+        "select.countrymodpro_operating_mode",
+        "sensor.countrymodpro_mode",
+        "select.countrymodpro_fan_level",
+    ):
+        assert _state(hass, entity_id) == STATE_UNKNOWN, entity_id
+    # The rest is still the unit's report.
+    assert state.attributes["temperature"] == 72
+    assert state.attributes["current_temperature"] == 75
+    assert _state(hass, "number.countrymodpro_setpoint") == "72"
+    assert _state(hass, "sensor.countrymodpro_air_temperature") == "75"
+    assert _state(hass, "sensor.countrymodpro_battery_voltage") == "13"
+    assert _state(hass, "switch.countrymodpro_power") == "off"
+    assert _state(hass, "switch.countrymodpro_display") == "on"
+
+
 @pytest.mark.parametrize("mode", [Mode.Dehumid, Mode.Unknown])
 async def test_unreported_mode_is_unknown(hass, runtime, mode):
     """Nothing is guessed for a mode HA doesn't offer."""
@@ -238,6 +261,7 @@ async def test_other_entities_from_status(hass, runtime):
 
 COOL = replace(STATUS, mode=Mode.Cool)
 OFF_IN_ECO = replace(STATUS, power=False, mode=Mode.Eco)
+FAN_ONLY = replace(STATUS, mode=Mode.FanOnly)
 
 
 @pytest.mark.parametrize(
@@ -249,6 +273,10 @@ OFF_IN_ECO = replace(STATUS, power=False, mode=Mode.Eco)
          (Op.Mode, Mode.FanOnly)),
         (STATUS, "climate", "turn_off", CLIMATE, {}, (Op.Power, 0)),
         (STATUS, "climate", "turn_on", CLIMATE, {}, (Op.Power, 1)),
+        # Preset none only clears a preset that is on; anything else sends nothing.
+        (COOL, "climate", "set_preset_mode", CLIMATE, {"preset_mode": "none"}, None),
+        (FAN_ONLY, "climate", "set_preset_mode", CLIMATE, {"preset_mode": "none"}, None),
+        (OFF_IN_ECO, "climate", "set_preset_mode", CLIMATE, {"preset_mode": "none"}, None),
         (STATUS, "climate", "set_preset_mode", CLIMATE, {"preset_mode": "none"},
          (Op.ClearPreset, 0)),
         (COOL, "climate", "set_preset_mode", CLIMATE, {"preset_mode": "eco"}, (Op.Mode, Mode.Eco)),
@@ -301,7 +329,7 @@ async def test_climate_commands_map_to_ops(
     )
     await hass.async_block_till_done()
 
-    assert runtime.commands == [expected]
+    assert runtime.commands == ([expected] if expected else [])
     assert all(type(v) is int for _, v in runtime.commands)
     # Not optimistic: the state only moves with the unit's next status.
     after = hass.states.get(entity_id)
