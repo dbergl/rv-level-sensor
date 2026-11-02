@@ -418,7 +418,8 @@ sensor connects to that unit only, so it can never wander onto a neighbor's AC. 
 console also prints a status line starting `AC link=`.
 
 **Pairing Home Assistant** is done from Home Assistant, below. The sensor accepts the pairing
-only while the window is open, replaces any earlier pairing, and answers `Home Assistant paired`.
+only while the window is open, replaces any earlier pairing (even one whose Home Assistant is
+connected), and answers `Home Assistant paired`.
 
 ### Adding the AC in Home Assistant
 
@@ -532,7 +533,8 @@ drops and recovers within a minute or so.
   unencrypted and can be read by anyone with a sniffer in range. Only commands are protected.
 - **There is no automatic re-pairing.** If the sensor loses its pairing (`unpair`, a new board, or
   flash erased), the Home Assistant entry keeps trying and fails. Remove the AC entry and add it
-  again with the window open. Pairing again from another Home Assistant replaces the first.
+  again with the window open. Pairing again from another Home Assistant replaces the first, even
+  while the first is connected; it is disconnected and its AC entities become unavailable.
 - **One Home Assistant** is paired at a time.
 - **The panel's power button while the AC shows off** was not captured on the coach, so whether
   it turns the AC on is unconfirmed. The cool and fan buttons and Home Assistant do power it on

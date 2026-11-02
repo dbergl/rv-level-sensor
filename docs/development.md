@@ -107,6 +107,15 @@ bench:
 
 The sensor ignores instance numbers other than 7 and frames from its own address.
 
+Still to check on the hardware before cut-over:
+
+- **Panel fan and setpoint buttons.** Capture (`candump`) the real panel's fan and setpoint button
+  frames and confirm the fan bits match what the sensor decodes.
+- **Four links at once.** AC unit, Home Assistant and an extra central (for example
+  `ha_client.py stranger --hold 60`) connected together; BTHome adverts still visible.
+- **Unit power pulled.** Pull the AC's power: instance-7 status stops and Home Assistant's
+  "AC responding" turns off within about 15 s, and the panel goes stale.
+
 ### Earlier pre-release builds
 
 A device flashed with an earlier pre-release build of the AC bridge branch stored the AC's

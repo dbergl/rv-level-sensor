@@ -372,7 +372,8 @@ UUIDs share the base `af48xxxx-29e2-47f0-a341-4f1a49271bf4` with the update serv
 | `af480104` | Command | write, notify |
 
 The sensor is connectable only when someone can use it: a paired Home Assistant with no live
-session, or while the pairing window is open. A link that has not proved the pairing key is
+session, or anyone while the pairing window is open (even beside a live session, so a second Home
+Assistant can pair). A link that has not proved the pairing key is
 dropped after 30 s. Notifications need an MTU of at least 37 (the 34-byte status plus 3); the
 pairing reply (33 bytes) needs 36. Auth and command writes are queued, at most 2 per link, so a
 stranger cannot crowd out Home Assistant.
@@ -382,7 +383,8 @@ stranger cannot crowd out Home Assistant.
 The pairing window is opened at the board ([usage.md §10](usage.md#10-air-conditioner-ac-bridge)).
 Subscribe to Auth notifications, then write `01 ‖ haPub` (haPub: 32-byte X25519 public key). The
 reply is a notification `01 ‖ espPub`. `01` alone is a refusal: window closed, wrong length, MTU
-too small, or a low-order key.
+too small, or a low-order key. A link not subscribed to Auth is refused too, and nothing is stored
+(it could not receive the reply).
 
 - The board makes a fresh X25519 key for each pairing and wipes it afterwards.
 - `shared` = X25519(own private key, peer public key). An all-zero `shared` is refused.
@@ -412,7 +414,8 @@ nothing, so a stranger cannot disturb the session. Other first bytes on Auth are
 
 Notified on Status to the session's link once it subscribes, then on every change, whenever the
 responding flag changes, and every 5 s. Reading Status returns the same 34 bytes to the session's
-link and nothing to anyone else.
+link and nothing to anyone else. The Home Assistant integration treats 15 s without a status as a
+dead session: entities go unavailable and it reconnects.
 
 | Byte | Field |
 |---|---|
@@ -467,7 +470,7 @@ is that of the command (0 if a BadAuth reply was for a write under 4 bytes).
 | 00h | Ok | The unit's status shows it done |
 | 01h | Refused | Not allowed: bad value, setpoint outside 61–86 °F or while the unit shows °C, unknown setpoint for a step, preset while off, queue full |
 | 02h | Unreachable | No live unit, or it was lost before the command finished. Never queued for later |
-| 03h | NotConfirmed | Sent twice and the status never showed it done |
+| 03h | NotConfirmed | Sent twice and the status never showed it done, or still queued behind other commands 10 s after it arrived (then never sent) |
 | 04h | BadAuth | Not from the session, bad MAC, counter reused or too low |
 
 Status and result notifications are neither signed nor encrypted. They go only to the session's
