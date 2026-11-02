@@ -371,6 +371,28 @@ void test_unreachable_fails_fast_and_never_replays() {
   for (size_t i = before; i < r.link.writes.size(); i++) TEST_ASSERT_TRUE(isPoll(r.link.writes[i]));
 }
 
+void test_silent_unit_flushes_queue() {
+  Rig r;
+  r.unit.power = true;
+  r.ready();  // last frame at 60
+  r.autoReply = false;
+  r.submit(Op::Power, 0, 1);
+  r.submit(Op::Fan, 2, 2);
+  r.submit(Op::Light, 1, 3);
+  r.advance(9990);  // now 10060 = last frame + 10 s
+  r.expectResult(1, Result::NotConfirmed);  // two timeouts
+  r.expectResult(2, Result::Unreachable);   // in flight when the window closed
+  r.expectResult(3, Result::Unreachable);
+  r.expectNoResult();
+  const size_t cmds = r.commands().size();
+
+  r.autoReply = true;  // the unit comes back
+  r.advance(10000);
+  TEST_ASSERT_TRUE(r.br.responding(r.now));
+  TEST_ASSERT_EQUAL(cmds, r.commands().size());  // only polls since
+  r.expectNoResult();
+}
+
 void test_queue_limit_refuses() {
   Rig r;
   r.ready();
@@ -458,6 +480,7 @@ int main(int, char**) {
   RUN_TEST(test_reply_differs_reports_not_confirmed_without_loop);
   RUN_TEST(test_timeout_retries_once_then_fails);
   RUN_TEST(test_unreachable_fails_fast_and_never_replays);
+  RUN_TEST(test_silent_unit_flushes_queue);
   RUN_TEST(test_queue_limit_refuses);
   RUN_TEST(test_status_version_bumps_only_on_change);
   RUN_TEST(test_responding_window);

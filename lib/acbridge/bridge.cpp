@@ -195,6 +195,12 @@ void Bridge::finish(Result r) {
 void Bridge::tick(uint32_t nowMs) {
   if (!checkLink()) return;
 
+  // Connected but silent counts as an outage too: never carry intents across it. The one in
+  // flight ends here as well rather than retrying into silence. Polls carry on.
+  if (count_ > 0 && !responding(nowMs)) {
+    while (count_ > 0) finish(Result::Unreachable);
+  }
+
   if (wait_ != Wait::None) {
     if (nowMs - lastWriteMs_ < kTimeoutMs) return;
     const bool cmd = wait_ == Wait::Command;
