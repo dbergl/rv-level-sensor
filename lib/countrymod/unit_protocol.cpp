@@ -12,10 +12,12 @@ uint8_t sum(const uint8_t* p, size_t n) {
   return s;
 }
 
-// Whole degrees; the unit reports whole degrees in either scale.
+// Whole degrees; the unit reports whole degrees in either scale. Unknown if it doesn't fit a
+// byte: garbage °C must not wrap into a believable °F.
 uint8_t toF(uint8_t v, bool celsius) {
   if (!celsius) return v;
-  return static_cast<uint8_t>((v * 18 + 325) / 10);  // round(v * 9 / 5 + 32)
+  const int f = (v * 18 + 325) / 10;  // round(v * 9 / 5 + 32)
+  return f <= 254 ? static_cast<uint8_t>(f) : kUnknown;
 }
 
 uint8_t inRange(uint8_t f, uint8_t lo, uint8_t hi) { return (f >= lo && f <= hi) ? f : kUnknown; }

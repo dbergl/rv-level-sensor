@@ -93,7 +93,9 @@ void Bridge::submit(const Intent& i, uint32_t nowMs) {
     default: ok = false; break;
   }
   if (!ok || count_ >= kMaxPending) return pushResult(i.tag, Result::Refused);
-  queue_[(head_ + count_++) % kMaxPending] = q;
+  const size_t slot = (head_ + count_++) % kMaxPending;
+  queue_[slot] = q;
+  queuedMs_[slot] = nowMs;
 }
 
 bool Bridge::checkLink() {
@@ -210,6 +212,10 @@ void Bridge::tick(uint32_t nowMs) {
   }
 
   while (count_ > 0 && !active_) {
+    if (queue_[head_].tag != 0 && nowMs - queuedMs_[head_] >= kStartDeadlineMs) {
+      finish(Result::NotConfirmed);  // HA has given up on it
+      continue;
+    }
     if (expand(queue_[head_])) {
       if (cmdCount_ == 0) finish(Result::Ok);  // nothing to do
       else active_ = true;

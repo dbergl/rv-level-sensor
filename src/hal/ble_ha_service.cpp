@@ -7,7 +7,6 @@
 #include <cstring>
 
 #include "hal/nvs_store.h"
-#include "hal/pair_window.h"
 #include "monocypher.h"
 
 namespace {
@@ -55,7 +54,7 @@ class StatusCb : public SubCb {
 
 }  // namespace
 
-BleHaService::BleHaService(BleServer& server, ac::Bridge& bridge, NvsStore& store, PairWindow& window)
+BleHaService::BleHaService(BleServer& server, ac::Bridge& bridge, NvsStore& store, ac::PairWindow& window)
     : server_(server), bridge_(bridge), store_(store), window_(window), ha_(bridge, fillRandom) {}
 
 void BleHaService::fillRandom(uint8_t* out, size_t n) { esp_fill_random(out, n); }
@@ -188,8 +187,9 @@ void BleHaService::handle(const Write& w, uint32_t nowMs) {
     send(command_, kCommandChr, out);
     return;
   }
-  // The pairing reply must arrive whole, or HA would hold a key the board doesn't.
-  bool pairAllowed = window_.isOpen(nowMs) && fits(w.h, 1 + ac::kKeyLen);
+  // The pairing reply must reach HA whole, or the board would hold a key HA doesn't: refused
+  // (nothing stored) unless the link listens on Auth and its MTU fits the key.
+  bool pairAllowed = window_.isOpen(nowMs) && subscribed(w.h, kAuthChr) && fits(w.h, 1 + ac::kKeyLen);
   switch (ha_.onAuth(w.h, w.d, w.n, pairAllowed, out)) {
     case ac::HaControl::Auth::Paired:
       store_.saveHaKey(ha_.key());
@@ -242,8 +242,10 @@ void BleHaService::poll(uint32_t nowMs) {
     }
     logged_ = link;
   }
-  // Connectable only for someone who can use it: the paired HA, or one pairing now.
-  server_.setWantConnectable(BleServer::kWantHa, link == kNoLink && (ha_.paired() || window_.isOpen(nowMs)));
+  // Connectable only for someone who can use it: the paired HA, or one pairing now (even beside
+  // a session, so a different HA can be paired).
+  bool windowOpen = window_.isOpen(nowMs);
+  server_.setWantConnectable(BleServer::kWantHa, (link == kNoLink && ha_.paired()) || windowOpen);
 }
 
 void BleHaService::forget() {

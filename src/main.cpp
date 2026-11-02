@@ -17,10 +17,10 @@
 #include "hal/mpu6050.h"
 #include "hal/nvs_store.h"
 #include "hal/ota_flash.h"
-#include "hal/pair_window.h"
 #include "hal/status_led.h"
 #include "node.h"
 #include "ota_trial.h"
+#include "pair_window.h"
 #include "schedule.h"
 #include "sensor_health.h"
 
@@ -51,7 +51,7 @@ bool fastCpu = false;   // at CPU_MHZ_UPDATE while the update window is open
 BleUnitLink unitLink(bleServer);
 ac::Bridge bridge(unitLink);
 rvc::AcPanel acPanel(bridge, can);
-PairWindow pairWindow;
+ac::PairWindow pairWindow(cfg::PAIR_WINDOW_MS);
 BleHaService haService(bleServer, bridge, store, pairWindow);
 bool unitLinkUp = false;  // BleUnitLink::begin succeeded
 bool haServiceUp = false;  // BleHaService::begin succeeded
@@ -366,7 +366,7 @@ void loop() {
     if (haServiceUp) haService.poll(now);  // drains the bridge's results
     uint8_t addr[6], type;
     if (unitLink.takeNewBinding(addr, type)) store.saveUnitAddress(addr, type);
-    bool pairOpen = pairWindow.isOpen(now);
+    bool pairOpen = pairWindow.isOpen(now);  // every pass: this is what makes expiry final
     if (pairWasOpen && !pairOpen) Serial.println("pairing window closed");
     pairWasOpen = pairOpen;
   }

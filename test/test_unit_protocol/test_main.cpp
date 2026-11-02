@@ -199,6 +199,14 @@ void test_decode_celsius_converts() {
   TEST_ASSERT_EQUAL_UINT8(18, s.setpointRaw);
 }
 
+void test_decode_celsius_garbage_unknown() {
+  // 150 °C is 302 °F and 160 °C is 320 °F: truncated to a byte they'd read 46 and 64.
+  UnitStatus s = decode(0x80, 0, 150, 52, 0, 160);
+  TEST_ASSERT_EQUAL_UINT8(0xFF, s.airTempF);
+  TEST_ASSERT_EQUAL_UINT8(0xFF, s.setpointF);
+  TEST_ASSERT_EQUAL_UINT8(0xFF, decode(0x80, 0, 0xFF, 52, 0).airTempF);
+}
+
 void test_decode_rejects_bad_frame() {
   uint8_t f[kFrameLen];
   goodFrame(f);
@@ -221,6 +229,7 @@ int main() {
   RUN_TEST(test_decode_mode);
   RUN_TEST(test_decode_out_of_range_unknown);
   RUN_TEST(test_decode_celsius_converts);
+  RUN_TEST(test_decode_celsius_garbage_unknown);
   RUN_TEST(test_decode_rejects_bad_frame);
   return UNITY_END();
 }

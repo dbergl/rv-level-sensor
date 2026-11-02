@@ -95,6 +95,7 @@ struct Rig {
   Unit unit;
   bool autoReply = true;    // the unit answers each write with a status frame
   bool applyWrites = true;  // the unit obeys commands
+  uint32_t replyMs = 50;    // reply delay after each write
   size_t answered = 0;
 
   void sendStatus() {
@@ -105,12 +106,12 @@ struct Rig {
     br.onNotify(f + 10, cm::kFrameLen - 10, now);
   }
 
-  // Ticks every 10 ms; the unit replies 50 ms after each write.
+  // Ticks every 10 ms; the unit replies replyMs after each write.
   void advance(uint32_t ms) {
     for (uint32_t end = now + ms; now < end;) {
       now += 10;
       br.tick(now);
-      while (answered < link.writes.size() && now - link.writes[answered].at >= 50) {
+      while (answered < link.writes.size() && now - link.writes[answered].at >= replyMs) {
         const Write& w = link.writes[answered++];
         if (applyWrites) apply(unit, w.func, w.data);
         if (autoReply) sendStatus();
@@ -403,6 +404,41 @@ void test_queue_limit_refuses() {
   r.expectResult(99, Result::Refused);
 }
 
+void test_ha_intent_not_started_in_time_fails_unwritten() {
+  Rig r;
+  r.ready();
+  // Slow replies that never confirm: each panel intent takes two writes, about 5.8 s.
+  r.applyWrites = false;
+  r.replyMs = 2900;
+  r.submit(Op::Power, 1, 0);
+  r.submit(Op::Power, 1, 0);
+  r.submit(Op::Light, 1, 9);   // HA: reaches the front after its 10 s
+  r.submit(Op::Display, 0, 0);  // the panel's: no deadline
+  r.advance(30000);
+  r.expectResult(0, Result::NotConfirmed);
+  r.expectResult(0, Result::NotConfirmed);
+  r.expectResult(9, Result::NotConfirmed);
+  r.expectResult(0, Result::NotConfirmed);
+  bool display = false;
+  for (const Write& w : r.commands()) {
+    TEST_ASSERT_NOT_EQUAL_HEX8(0x1C, w.func);  // the light was never written
+    display = display || w.func == 0x0A;
+  }
+  TEST_ASSERT_TRUE(display);
+}
+
+void test_ha_intent_started_in_time_runs() {
+  Rig r;
+  r.ready();
+  r.replyMs = 2900;
+  r.submit(Op::Power, 1, 0);  // confirmed at its first reply, about 3 s
+  r.submit(Op::Light, 1, 9);
+  r.advance(10000);
+  r.expectResult(0, Result::Ok);
+  r.expectResult(9, Result::Ok);
+  TEST_ASSERT_TRUE(r.br.status().light);
+}
+
 void test_status_version_bumps_only_on_change() {
   Rig r;
   TEST_ASSERT_EQUAL_UINT32(0, r.br.statusVersion());
@@ -482,6 +518,8 @@ int main(int, char**) {
   RUN_TEST(test_unreachable_fails_fast_and_never_replays);
   RUN_TEST(test_silent_unit_flushes_queue);
   RUN_TEST(test_queue_limit_refuses);
+  RUN_TEST(test_ha_intent_not_started_in_time_fails_unwritten);
+  RUN_TEST(test_ha_intent_started_in_time_runs);
   RUN_TEST(test_status_version_bumps_only_on_change);
   RUN_TEST(test_responding_window);
   RUN_TEST(test_invalid_values_refused);

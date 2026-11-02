@@ -8,10 +8,10 @@
 #include "bridge.h"
 #include "ha_control.h"
 #include "hal/ble_server.h"
+#include "pair_window.h"
 
 class NimBLECharacteristic;
 class NvsStore;
-class PairWindow;
 
 // Home Assistant control service (paired, per-command authenticated) on the shared BleServer:
 // auth (0102), status (0103) and command (0104) characteristics. ac::HaControl holds the logic.
@@ -27,7 +27,7 @@ class BleHaService : public IBleConnListener {
  public:
   static constexpr const char* kServiceUuid = "af480101-29e2-47f0-a341-4f1a49271bf4";
 
-  BleHaService(BleServer& server, ac::Bridge& bridge, NvsStore& store, PairWindow& window);
+  BleHaService(BleServer& server, ac::Bridge& bridge, NvsStore& store, ac::PairWindow& window);
   bool begin();  // after BleServer::begin; loads the pairing key
   void poll(uint32_t nowMs);
   // Unpair: forgets the key in memory and disconnects the session. The caller clears NVS.
@@ -84,7 +84,7 @@ class BleHaService : public IBleConnListener {
   BleServer& server_;
   ac::Bridge& bridge_;
   NvsStore& store_;
-  PairWindow& window_;
+  ac::PairWindow& window_;
   ac::HaControl ha_;  // loop task only
   NimBLECharacteristic* auth_ = nullptr;
   NimBLECharacteristic* status_ = nullptr;

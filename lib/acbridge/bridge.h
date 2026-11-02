@@ -13,6 +13,9 @@ constexpr uint32_t kGapMs = 400;
 constexpr uint32_t kTimeoutMs = 3000;
 constexpr uint32_t kPollMs = 3000;
 constexpr uint32_t kRespondingMs = 10000;
+// An HA intent (tag != 0) not started by then fails NotConfirmed, unwritten: HA gives up on a
+// command, so it must not change the unit later.
+constexpr uint32_t kStartDeadlineMs = 10000;
 constexpr size_t kMaxPending = 8;
 constexpr size_t kMaxResults = 16;
 
@@ -77,6 +80,7 @@ class Bridge {
   // FIFO of intents; the front one is executing once active_ is set. Setpoint/StepSetpoint are
   // stored as Setpoint with the absolute target resolved at submit.
   Intent queue_[kMaxPending];
+  uint32_t queuedMs_[kMaxPending];  // submit time, per queue_ slot
   size_t head_ = 0;
   size_t count_ = 0;
   bool active_ = false;
