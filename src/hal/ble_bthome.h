@@ -16,11 +16,14 @@ class BleBthome {
   // Without leveling: an advert with the name and no readings, so the GATT service can be found.
   void update(uint32_t nowMs);
   // Connectable or not; the advert data is unchanged, so HA keeps receiving readings. Restarts
-  // advertising (a connection stops it).
+  // advertising (a connection stops it). Falls back to non-connectable if that start fails.
   void setConnectable(bool on);
+  bool connectable() const { return connectable_; }  // what is actually advertised
 
  private:
   void apply(const uint8_t* body, size_t n);  // n == 0: no readings
+  bool start();
+  void heal();
 
   NimBLEAdvertising* adv_ = nullptr;
   const char* name_ = "";
@@ -28,6 +31,7 @@ class BleBthome {
   bthome::Encoder enc_;
   bthome::AdvertSchedule schedule_{500, 10000};
   bool started_ = false;
+  bool connectable_ = false;
   uint8_t last_[bthome::kMaxBody] = {};
   size_t lastLen_ = 0;
 };

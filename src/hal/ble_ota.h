@@ -34,7 +34,7 @@ class BleOta : public IBleConnListener {
   void onInfoRead();
 
  private:
-  static constexpr uint16_t kNoLink = 0xFFFF;  // BLE_HS_CONN_HANDLE_NONE
+  static constexpr uint16_t kNoLink = blelink::kNoLink;
 
   struct Lock {
     explicit Lock(SemaphoreHandle_t m) : m_(m) { xSemaphoreTake(m_, portMAX_DELAY); }

@@ -123,7 +123,10 @@ void BleOta::onControlWrite(uint16_t h, const uint8_t* d, size_t len) {
   {
     Lock l(mu_);
     uint16_t c = client_.load();
-    if (c == kNoLink && session_.windowOpen()) client_ = c = h;
+    if (c == kNoLink && session_.windowOpen()) {
+      client_ = c = h;
+      server_.claim(h);
+    }
     if (c != kNoLink && c != h) return;  // the session belongs to the client's link
     n = session_.onControl(d, len, millis());
   }

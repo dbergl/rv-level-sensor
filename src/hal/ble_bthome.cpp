@@ -27,6 +27,7 @@ bool BleBthome::begin(const char* name, uint32_t advIntervalMs, uint32_t refresh
 void BleBthome::update(const bthome::Reading& r, uint32_t nowMs) {
   if (adv_ == nullptr) return;
   if (!schedule_.refreshDue(nowMs)) return;
+  heal();
 
   uint8_t body[bthome::kMaxBody];
   size_t n = enc_.encode(r, body, sizeof body);
@@ -43,6 +44,7 @@ void BleBthome::update(const bthome::Reading& r, uint32_t nowMs) {
 void BleBthome::update(uint32_t nowMs) {
   if (adv_ == nullptr) return;
   if (!schedule_.refreshDue(nowMs)) return;
+  heal();
   if (!schedule_.shouldSend(!started_, nowMs)) return;  // nothing changes; re-applied every reapplyMs
   apply(nullptr, 0);
 }
@@ -60,12 +62,28 @@ void BleBthome::apply(const uint8_t* body, size_t n) {
   sr.setName(name_);
   if (serviceUuid_ != nullptr) sr.setCompleteServices(NimBLEUUID(serviceUuid_));
   adv_->setScanResponseData(sr);
-  if (!started_) started_ = adv_->start();
+  if (!started_) started_ = start();
+}
+
+// The broadcast must never stop: NimBLE refuses a connectable start with no free link slot, so
+// fall back to non-connectable rather than not advertising.
+bool BleBthome::start() {
+  if (adv_->start()) return true;
+  if (!connectable_) return false;
+  adv_->setAdvertisementType(BLE_GAP_CONN_MODE_NON);
+  connectable_ = false;
+  return adv_->start();
+}
+
+// Restart advertising if something stopped it (a connection, a failed start).
+void BleBthome::heal() {
+  if (started_ && !adv_->isAdvertising()) start();
 }
 
 void BleBthome::setConnectable(bool on) {
   if (adv_ == nullptr) return;
   adv_->stop();
   adv_->setAdvertisementType(on ? BLE_GAP_CONN_MODE_UND : BLE_GAP_CONN_MODE_NON);
-  if (started_) adv_->start();
+  connectable_ = on;
+  if (started_) start();
 }
