@@ -12,6 +12,8 @@ setting it up for your coach and your blocks. To build and install one, see
    ([§5](#5-block-leveling)). The defaults are 159.0″ wheelbase, 68.5″ track, 1.00″ blocks and
    10 blocks carried.
 4. Optional: set up the **Home Assistant** dashboard ([§6](#6-home-assistant)).
+5. Optional, AC bridge builds: bind the CountryModPro AC and pair Home Assistant
+   ([§10](#10-air-conditioner-ac-bridge)).
 
 Everything you set is saved in the sensor and kept through power cycles and firmware updates.
 
@@ -200,6 +202,9 @@ built-in BTHome integration picks it up, and the project's **RV Level** integrat
 blocks for each wheel, its settings and a dashboard. The Bluetooth broadcast is read-only:
 zeroing and the sensor's own settings are done from the panel, USB or RV-C.
 
+In AC bridge builds the same integration also controls the CountryModPro air conditioner,
+over a paired connection rather than the broadcast ([§10](#10-air-conditioner-ac-bridge)).
+
 ### Installing
 
 1. Make sure Home Assistant has a Bluetooth adapter within range of the sensor. It should
@@ -352,3 +357,186 @@ Message layouts are in the [protocol reference](protocol.md).
 | Panel says level but the LED blinks (or the reverse) | Expected near level: they use different rules ([§2](#two-meanings-of-level)). |
 | RV Level dashboard shows "Custom element doesn't exist: mushroom-template-card" | Install **Mushroom** from HACS ([§6](#installing)). |
 | Home Assistant does not find the sensor | Its Bluetooth adapter must be within range. Check `BLE_ENABLED` was not turned off in the build. |
+| The panel's AC goes blank or stale | The sensor has no live link to the AC (the console shows `AC link=0` or `responding=0`). Check the AC's power and range, and that nothing else (the vendor app, `countrymodpro`) holds its connection. It reconnects by itself, waiting up to 30 s between tries ([§10](#10-air-conditioner-ac-bridge)). |
+| Console says `no AC unit (KT...) found` | The AC is off, out of range or busy with another app. Free it and type `pair`. |
+| Console says `AC candidate … rejected` | That device connected but did not behave like the AC (no service, or no status within 5 s). Type `pair` to scan again; if it keeps picking the wrong one, move closer to your AC. |
+| Home Assistant says the AC bridge is not in pairing mode | The window is closed. Type `pair` on the console and submit again ([§10](#adding-the-ac-in-home-assistant)). |
+| AC entities are unavailable in Home Assistant | Home Assistant has no session with the sensor: power, range, or the sensor was `unpair`ed or re-paired from elsewhere. In the last case remove the AC entry and add it again. |
+| AC setpoint changes fail | The unit is showing °C. Turn `switch.countrymodpro_display_in_celsius` off. |
+
+## 10. Air conditioner (AC bridge)
+
+Builds with the AC bridge (the default `esp32` build, or `esp32_ac` without leveling; see
+[setup.md §7](setup.md#7-build-options)) also act as the Bluetooth controller for a
+CountryModPro rooftop AC. The sensor holds the one Bluetooth connection the AC allows, and both
+the Firefly panel (over RV-C) and Home Assistant (over Bluetooth) control the AC through it. The
+panel needs no Home Assistant, broker or other computer.
+
+Both show what the AC last reported. A button press is a request: it is done when the AC's own
+status shows it. If the sensor cannot reach the AC, it stops sending the panel its status, so the
+panel's AC goes stale after 30 seconds instead of showing a frozen state, and Home Assistant shows
+the AC as not responding. A press made while the AC is unreachable fails and is not remembered
+for later.
+
+Not supported: dry (dehumidify) mode, fresh air, heating, and the unit's countdown timer. A
+heat or dry request from the panel is ignored. Only the Firefly v66 panel has been checked.
+
+### Pairing
+
+Two things are bound to the sensor on purpose, never automatically from the air: **which AC
+unit** it controls, and **which Home Assistant** may command it. Both happen in the **pairing
+window**, which is 120 seconds long. Open it yourself, at the coach, from the USB serial monitor
+(`pio device monitor`, 115200 baud):
+
+| Command | What it does |
+|---|---|
+| `pair` | Opens the window. If no AC unit is bound, it scans for 10 seconds for one named `KT…`, picks the strongest signal and tries it. Home Assistant can pair while the window is open |
+| `forget-ac` | Forgets the bound AC unit, disconnects it and stops reconnecting. `pair` binds one again |
+| `unpair` | Forgets the paired Home Assistant and drops its connection. The AC unit stays bound |
+
+The window also opens by itself at start-up when the sensor has neither an AC unit nor a Home
+Assistant stored: a new sensor, or after `forget-ac` and `unpair`. A sensor that has either one
+stored stays closed at start-up; type `pair`. The window closes by itself after 120 seconds, or as
+soon as Home Assistant has paired (`pairing window closed` on the console).
+
+**Binding the AC unit.** Power the AC, close the vendor app, and make sure nothing else is
+connected to it (the unit takes one connection at a time, including Home Assistant's
+`countrymodpro` integration). The console shows:
+
+```
+pairing window open (120 s)
+scanning 10 s for the AC unit (KT...)
+AC candidate KT2026010000007 02:12:34:56:78:9A (RSSI -61 dBm): connecting to verify
+AC unit bound: KT2026010000007 02:12:34:56:78:9A
+```
+
+Check that the name is your unit's. The candidate is saved only after the sensor has connected,
+found the AC's service and received a valid status frame within 5 seconds. Otherwise the console
+says `AC candidate … rejected: …` and that device is never tried again. `no AC unit (KT...)
+found` means nothing was heard: check power and range and type `pair` again. Once bound, the
+sensor connects to that unit only, so it can never wander onto a neighbor's AC. Each second the
+console also prints a status line starting `AC link=`.
+
+**Pairing Home Assistant** is done from Home Assistant, below. The sensor accepts the pairing
+only while the window is open, replaces any earlier pairing, and answers `Home Assistant paired`.
+
+### Adding the AC in Home Assistant
+
+1. Install the integration ([§6](#installing)). Home Assistant must have a Bluetooth adapter in
+   range of the sensor.
+2. Type `pair` on the sensor's console (or power on a new sensor).
+3. **Settings → Devices & services → Add integration → RV Level → Air conditioner (AC bridge)**.
+   Choose the sensor, and press Submit. "Not in pairing mode" means the window had closed: type
+   `pair` and submit again.
+
+Home Assistant keeps a connection to the sensor and reconnects by itself. The AC can be added
+with or without a leveling entry, and a leveling-only coach needs nothing of this.
+
+The device is named **CountryModPro**, with the same entity IDs as the `countrymodpro`
+integration it replaces:
+
+| Entity | What |
+|---|---|
+| `climate.countrymodpro` | Off, cool, fan only; presets none, eco, sleep, boost (turbo); fan auto and 1–5; setpoint 61–86 °F; air temperature |
+| `switch.countrymodpro_power`, `binary_sensor.countrymodpro_power` | Power |
+| `select.countrymodpro_operating_mode`, `sensor.countrymodpro_mode` | Cool, eco, sleep, turbo, fan only |
+| `select.countrymodpro_fan_level` | Auto, 1–5 |
+| `number.countrymodpro_setpoint` | Setpoint, 61–86 °F |
+| `sensor.countrymodpro_air_temperature` | Air temperature, °F |
+| `sensor.countrymodpro_battery_voltage` | Battery voltage, V |
+| `sensor.countrymodpro_low_voltage_protection` | Low-voltage cut-off setting (diagnostic) |
+| `sensor.countrymodpro_status_frame` | The unit's last raw status frame as hex (diagnostic) |
+| `switch.countrymodpro_display_in_celsius` | The unit's own °C/°F scale |
+| `switch.countrymodpro_light`, `switch.countrymodpro_display`, `switch.countrymodpro_vent_oscillation` | Light, display, vent oscillation |
+| `binary_sensor.countrymodpro_ac_responding` | On while the sensor has a live link to the AC |
+| `binary_sensor.countrymodpro_unit_in_celsius` | Problem: the unit shows °C, so setpoint changes are refused |
+
+The fresh air switch and the dehumidify option no longer exist. Check that no automation uses
+them.
+
+Things to know:
+
+- **The AC is the truth.** A control changes only when the AC reports it; there is no guess in
+  between. A command that fails shows as an error in Home Assistant.
+- **While the AC is off,** preset, operating mode and fan show as unknown (the unit's mode and
+  fan are not meaningful then). The setpoint and air temperature stay shown. A mode the sensor
+  cannot decode shows as unknown too (and n/a on the panel).
+- **Cool while a preset is on does nothing.** Clear a preset with preset *none* (or the operating
+  mode select's *cool*, which does the same).
+- **A unit in °C:** the sensor never changes the unit's scale on its own. Turn
+  `switch.countrymodpro_display_in_celsius` off to put it back in °F.
+- **Availability.** If Home Assistant loses the sensor (no power, out of range), every AC entity
+  becomes unavailable, except `…_ac_responding`, which turns off. If the sensor loses only the AC,
+  the entities show unknown and `…_ac_responding` turns off.
+
+### Moving from the `countrymodpro` integration and the Pi
+
+Do these in order. Between steps 2 and 3, the panel is not controlling the AC.
+
+1. Check your automations and dashboards for the `countrymodpro` fresh air switch and dehumidify
+   option, which are dropped.
+2. Flash the AC bridge build ([setup.md §6](setup.md#6-building-the-firmware)). If the Pi is
+   still running its virtual AC, stop it first so two senders do not both send instance 7.
+3. Stop and disable the Pi's `virtual-ac` service, and remove `virtual_ac_bridge` from Home
+   Assistant.
+4. Remove `countrymodpro` from Home Assistant. This frees the AC's single connection (and its
+   entity IDs). The first-start scan will probably have found nothing while Home Assistant held the
+   AC: type `pair` now.
+5. Let the sensor connect to the AC (`AC unit bound`, then `AC link=1 responding=1`) and check
+   that the panel's AC page works.
+6. Add the AC in Home Assistant (above). Check the entity IDs and your pet-mode automation.
+
+### Alert when the AC stops during pet mode
+
+The pet-mode automation itself stays yours; the integration supplies the entities it needs.
+This one notifies if the AC stops responding, goes unavailable, or is turned off while a helper
+named `input_boolean.pet_mode` is on:
+
+```yaml
+automation:
+  - alias: Pet mode AC alert
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.countrymodpro_ac_responding
+        to: "off"
+        for: "00:05:00"
+      - trigger: state
+        entity_id: climate.countrymodpro
+        to: "unavailable"
+        for: "00:05:00"
+      - trigger: state
+        entity_id: climate.countrymodpro
+        to: "off"
+        for: "00:02:00"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.pet_mode
+        state: "on"
+    actions:
+      - action: notify.notify
+        data:
+          title: "Pet mode: check the AC"
+          message: "The AC is {{ states('climate.countrymodpro') }} and responding is {{ states('binary_sensor.countrymodpro_ac_responding') }}."
+```
+
+Use your own notify service. Adjust the delays: the responding sensor can flicker if the AC link
+drops and recovers within a minute or so.
+
+### Limits worth knowing
+
+- **Pairing has no confirmation code.** Anyone who connects to the sensor while the window is open
+  can pair, so open it (`pair`) only yourself, at the coach, and use it at once. After pairing,
+  every command needs the pairing key; strangers in range cannot send them.
+- **Status is not private.** The AC's state (power, temperature, battery voltage) travels
+  unencrypted and can be read by anyone with a sniffer in range. Only commands are protected.
+- **There is no automatic re-pairing.** If the sensor loses its pairing (`unpair`, a new board, or
+  flash erased), the Home Assistant entry keeps trying and fails. Remove the AC entry and add it
+  again with the window open. Pairing again from another Home Assistant replaces the first.
+- **One Home Assistant** is paired at a time.
+- **The panel's power button while the AC shows off** was not captured on the coach, so whether
+  it turns the AC on is unconfirmed. The cool and fan buttons and Home Assistant do power it on
+  by design; use those if the power button does nothing.
+- **Power use.** AC bridge builds run the processor at 240 MHz all the time. The extra current has
+  not been measured yet; it will be measured at the bench and added here. The leveling-only build
+  keeps 80 MHz.

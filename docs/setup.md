@@ -15,6 +15,11 @@ three ways:
   blocks to put under each wheel.
 - **Over Bluetooth LE** in the BTHome v2 format, which Home Assistant picks up.
 
+The default firmware also bridges a **CountryModPro rooftop air conditioner**: it holds the AC's
+single Bluetooth connection and lets a Firefly panel (over RV-C) and Home Assistant (over a
+paired Bluetooth connection) control it. The AC bridge and the leveling sensor can each be left
+out of a build ([§7](#7-build-options)).
+
 It is powered from the RV-C bus. Builds with Bluetooth updates turned on can be updated over
 Bluetooth once installed.
 
@@ -45,6 +50,9 @@ Bluetooth once installed.
 - **Home Assistant** with a Bluetooth adapter within range of the sensor, for the phone and tablet
   dashboard. See [usage.md §6](usage.md#6-home-assistant).
 - **A Firefly touchscreen panel** with the LEVEL page, for block-by-block leveling on the panel.
+- **A CountryModPro rooftop AC** within Bluetooth range of the sensor, for the AC bridge. Range
+  from the sensor to the AC, and to Home Assistant's adapter, depends on your coach: check it
+  before settling on a mounting spot.
 
 ## 3. Wiring
 
@@ -165,8 +173,12 @@ openscad -o case/level_case_lid.stl    -D 'part="lid"'    case/level_case.scad
 git clone <repository-url> level-sensor
 cd level-sensor
 pio test -e native     # host unit tests: no hardware needed
-pio run -e esp32       # build the firmware
+pio run -e esp32       # build the firmware (leveling and AC bridge)
 ```
+
+`esp32` builds both functions. `esp32_level` builds the leveling sensor alone and `esp32_ac`
+the AC bridge alone ([§7](#7-build-options)). Use the same `-e` name wherever this guide says
+`-e esp32`.
 
 The first build takes a few minutes while PlatformIO downloads its packages. The firmware image
 is written to `.pio/build/esp32/firmware.bin`.
@@ -186,7 +198,7 @@ PlatformIO finds the serial port by itself. If you have more than one, add
 On start-up the monitor shows a line like:
 
 ```
-RV-C level sensor DIY*LEVEL-MPU6050*A0B1C2D3E4F5* firmware 1a2b3c4 2026-09-29 14:02:11 (slot 0)
+RV-C level sensor DIY*LEVEL-AC*A0B1C2D3E4F5* firmware 1a2b3c4 2026-09-29 14:02:11 (slot 0)
 ```
 
 followed by a status line every second:
@@ -194,6 +206,9 @@ followed by a status line every second:
 ```
 SA=191 pitch=+0.42 roll=-1.07 low[D F P R]=1000 layers[FL FR RL RR]=1 0 2 1/10 fault=0 moving=0 busoff=0 drops=0
 ```
+
+AC bridge builds add a second line every second, starting `AC link=`, with the link to the AC,
+whether it is responding, and its mode, fan, setpoint, air temperature and battery voltage.
 
 `SA` is the RV-C address it claimed. `fault=1` means it cannot read the MPU-6050: check the
 wiring. `busoff=1` means the CAN bus is not working: check CAN-H/CAN-L, ground and termination.
@@ -208,15 +223,40 @@ pio run -e esp32 -t erase && pio run -e esp32 -t upload
 
 ## 7. Build options
 
-Compile-time settings live in `src/config.h`. Rebuild and reinstall after changing any of them.
+The firmware has two functions, the **leveling sensor** and the **AC bridge**, chosen by the
+PlatformIO environment you build. At least one must be on; turning both off does not compile.
+
+| Environment | Leveling | AC bridge | CPU | `PRODUCT_ID` model |
+|---|---|---|---|---|
+| `esp32` (default) | yes | yes | 240 MHz | `LEVEL-AC` |
+| `esp32_level` | yes | no | 80 MHz | `LEVEL-MPU6050` |
+| `esp32_ac` | no | yes | 240 MHz | `AC-COUNTRYMOD` |
+
+```bash
+pio run -e esp32_level -t upload     # for example
+```
+
+Without leveling there is no MPU-6050 to read, no leveling or per-wheel RV-C messages and no
+BTHome data (the sensor still advertises its name). Without the AC bridge no AC code runs and the
+CPU stays at 80 MHz. Under the hood the environments set `RVL_LEVELING` and
+`RVL_AC_BRIDGE`.
+
+**240 MHz.** At 80 MHz the Bluetooth controller misses new connections, and the AC bridge has
+to accept Home Assistant and hold the AC at any moment, so AC builds run at 240 MHz all the
+time. The leveling-only build stays at 80 MHz. The extra current has **not been measured yet**;
+it is to be measured at the bench (leveling-only against both) and recorded here.
+
+Other compile-time settings live in `src/config.h`. Rebuild and reinstall after changing any of
+them.
 
 | Setting | Default | Change it when |
 |---|---|---|
 | `AXIS_FORWARD`, `AXIS_DRIVER` | `PosX`, `PosY` | The MPU-6050 is not mounted with +X forward and +Y toward the driver side. Use `PosX`, `NegX`, `PosY`, `NegY`, `PosZ` or `NegZ`. The two must be different axes; the build fails otherwise. |
 | `SENSOR_INSTANCE` | 1 | You have more than one leveling sensor on the bus. |
 | `SA_RANGE_HIGH`, `SA_RANGE_LOW` | 191, 176 (BFh–B0h) | The range of RV-C addresses it may claim. It starts at the top. |
-| `BLE_ENABLED` | `true` | `false` turns off the Bluetooth broadcast and Bluetooth updates. |
-| `BLE_OTA_DISABLED` | `true` | `false` turns on Bluetooth updates ([§8](#8-updating-over-bluetooth)). While `true`, the sensor accepts no Bluetooth connections and updates are USB only. |
+| `BLE_ENABLED` | `true` | `false` turns off the Bluetooth broadcast, Bluetooth updates and the AC bridge's Bluetooth (so the AC bridge does nothing). |
+| `BLE_OTA_DISABLED` | `true` | `false` turns on Bluetooth updates ([§8](#8-updating-over-bluetooth)). While `true`, updates are USB only and the update service accepts no connections. (AC bridge builds still accept Home Assistant's paired connection.) |
+| `PAIR_WINDOW_MS` | 120000 | How long the AC pairing window stays open ([usage.md §10](usage.md#10-air-conditioner-ac-bridge)). |
 | `BLE_NAME` | "RV Level" | The Bluetooth name Home Assistant shows. |
 | `LED_BRIGHTNESS_PCT` | 3 | Status LED brightness, 0–100 % (0 = off). |
 | `PIN_*` | SK Pang board | You use a different ESP32 board or wiring. |
@@ -284,7 +324,7 @@ environment variables change where they are read from:
 | `OTA_KEY_DIR` | `sign.py`: the directory holding the key pair | `~/.config/rv-level` |
 
 **Turning Bluetooth updates on.** A sensor running a build with `BLE_OTA_DISABLED = true`
-accepts no Bluetooth connections. Install the first build with `BLE_OTA_DISABLED = false` over
+accepts no update connections. Install the first build with `BLE_OTA_DISABLED = false` over
 USB ([§6](#first-install-over-usb), or `tools/ota_deploy.sh --usb`). Later builds can go over
 Bluetooth.
 
