@@ -19,11 +19,14 @@ class BleBthome {
   // advertising (a connection stops it). Falls back to non-connectable if that start fails.
   void setConnectable(bool on);
   bool connectable() const { return connectable_; }  // what is actually advertised
+  // Restarts advertising if something stopped it (a connection, a failed start, a host reset).
+  // update() calls it unless an owner (BleServer) does, after deciding connectable or not.
+  void heal();
+  void setOwnerHeals(bool on) { ownerHeals_ = on; }
 
  private:
   void apply(const uint8_t* body, size_t n);  // n == 0: no readings
   bool start();
-  void heal();
 
   NimBLEAdvertising* adv_ = nullptr;
   const char* name_ = "";
@@ -32,6 +35,7 @@ class BleBthome {
   bthome::AdvertSchedule schedule_{500, 10000};
   bool started_ = false;
   bool connectable_ = false;
+  bool ownerHeals_ = false;
   uint8_t last_[bthome::kMaxBody] = {};
   size_t lastLen_ = 0;
 };

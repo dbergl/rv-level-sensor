@@ -35,7 +35,9 @@ static_assert(level::isValidAxisMap(AXIS_FORWARD, AXIS_DRIVER),
 
 // Timing / filtering
 constexpr uint32_t SAMPLE_PERIOD_MS = 10;
-constexpr uint32_t CPU_MHZ = 80;  // lowest clock that keeps Bluetooth advertising; APB (CAN, I2C, UART) stays 80 MHz
+// 80: lowest clock that keeps Bluetooth advertising; APB (CAN, I2C, UART) stays 80 MHz. With the AC
+// bridge, 240 all the time: the unit link and HA connect at any moment (see CPU_MHZ_UPDATE).
+constexpr uint32_t CPU_MHZ = AC_BRIDGE_ENABLED ? 240 : 80;
 // While the update window is open: at 80 MHz the BT controller misses new connections (the central
 // gives up with 0x3E, "connection failed to be established"); at 240 MHz it accepts them.
 constexpr uint32_t CPU_MHZ_UPDATE = 240;
@@ -58,6 +60,10 @@ constexpr uint32_t BLE_REAPPLY_MS = 10000;
 // Leaves out the Bluetooth update service: the sensor never accepts a connection, and a
 // GENERAL_RESET Reboot/Enter Bootloader restarts it instead. Updates are then USB only.
 constexpr bool BLE_OTA_DISABLED = true;
+
+// AC bridge: how long the pairing window (console "pair", or at boot while nothing is paired)
+// stays open to bind the AC unit and accept a Home Assistant pairing.
+constexpr uint32_t PAIR_WINDOW_MS = 120000;
 
 // SK Pang ESP32 CAN-Bus board pins
 constexpr int PIN_CAN_TX = 25;

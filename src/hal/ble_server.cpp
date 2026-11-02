@@ -37,6 +37,7 @@ bool BleServer::begin(BleBthome& adv) {
   if (server_ == nullptr) return false;
   server_->setCallbacks(new ServerCb(*this));
   server_->advertiseOnDisconnect(false);  // poll() owns advertising
+  adv.setOwnerHeals(true);
   return true;
 }
 
@@ -87,6 +88,10 @@ void BleServer::poll() {
     adv_->setConnectable(want);  // also restarts advertising, which a connection stops
     requested_ = want;
     lastTryMs_ = now;
+  } else if (!linkChanged_.load()) {
+    // Only once this poll has seen every link change: a restart right after a connect would
+    // otherwise go out connectable before the link is counted.
+    adv_->heal();
   }
 }
 

@@ -36,3 +36,29 @@ void NvsStore::saveSettings(const rvc::Settings& s) {
 }
 
 void NvsStore::saveAddress(uint8_t sa) { prefs_.putUChar("sa", sa); }
+
+bool NvsStore::loadUnitAddress(uint8_t addr[6], uint8_t& type) {
+  if (!prefs_.isKey("ac_addr") || !prefs_.isKey("ac_atype") || prefs_.getBytesLength("ac_addr") != 6) return false;
+  prefs_.getBytes("ac_addr", addr, 6);
+  type = prefs_.getUChar("ac_atype", 0);
+  return true;
+}
+
+void NvsStore::saveUnitAddress(const uint8_t addr[6], uint8_t type) {
+  prefs_.putBytes("ac_addr", addr, 6);
+  prefs_.putUChar("ac_atype", type);
+}
+
+void NvsStore::clearUnitAddress() {
+  prefs_.remove("ac_addr");
+  prefs_.remove("ac_atype");
+}
+
+bool NvsStore::loadHaKey(uint8_t key[32]) {
+  if (!prefs_.isKey("ha_key") || prefs_.getBytesLength("ha_key") != 32) return false;
+  return prefs_.getBytes("ha_key", key, 32) == 32;
+}
+
+void NvsStore::saveHaKey(const uint8_t key[32]) { prefs_.putBytes("ha_key", key, 32); }
+
+void NvsStore::clearHaKey() { prefs_.remove("ha_key"); }

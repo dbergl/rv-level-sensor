@@ -3,16 +3,20 @@
 
 #include <cstring>
 
+#include "ac_panel.h"
 #include "attitude.h"
+#include "bridge.h"
 #include "config.h"
 #include "fw_version.h"
 #include "hal/ble_bthome.h"
 #include "hal/ble_ota.h"
 #include "hal/ble_server.h"
+#include "hal/ble_unit_link.h"
 #include "hal/can_twai.h"
 #include "hal/mpu6050.h"
 #include "hal/nvs_store.h"
 #include "hal/ota_flash.h"
+#include "hal/pair_window.h"
 #include "hal/status_led.h"
 #include "node.h"
 #include "ota_trial.h"
@@ -42,6 +46,13 @@ constexpr bool kBleServerWanted = cfg::AC_BRIDGE_ENABLED || !cfg::BLE_OTA_DISABL
 bool bleServerUp = false;
 bool bleOtaUp = false;  // BleOta::begin succeeded; its mutex exists only then
 bool fastCpu = false;   // at CPU_MHZ_UPDATE while the update window is open
+// AC bridge (cfg::AC_BRIDGE_ENABLED): the unit link, the bridge and the panel's instance-7 AC.
+BleUnitLink unitLink(bleServer);
+ac::Bridge bridge(unitLink);
+rvc::AcPanel acPanel(bridge, can);
+PairWindow pairWindow;
+bool unitLinkUp = false;  // BleUnitLink::begin succeeded
+bool pairWasOpen = false;
 bool onTrial = false;       // booted a new image that hasn't confirmed itself yet
 bool imuValidSeen = !cfg::LEVELING_ENABLED;  // part of the trial's health check; no IMU to wait for without leveling
 
@@ -120,22 +131,73 @@ void printSummary() {
                 health.faulted(), filter.moving(millis()), can.busOff(), static_cast<unsigned long>(can.dropped()));
 }
 
+const char* modeName(cm::Mode m) {
+  switch (m) {
+    case cm::Mode::Cool: return "cool";
+    case cm::Mode::Eco: return "eco";
+    case cm::Mode::Sleep: return "sleep";
+    case cm::Mode::Turbo: return "turbo";
+    case cm::Mode::FanOnly: return "fan";
+    case cm::Mode::Dehumid: return "dehumid";
+    default: return "?";
+  }
+}
+
+void printAcSummary(uint32_t now) {
+  const cm::UnitStatus& u = bridge.status();
+  Serial.printf("AC link=%d responding=%d power=%d mode=%s fan=%u setpoint=%u%s air=%uF battery=%uV pair=%d\n",
+                unitLink.connected(), bridge.responding(now), u.power, modeName(u.mode), u.fan, u.setpointRaw,
+                u.celsius ? "C" : "F", u.airTempF, u.batteryV, pairWindow.isOpen(now));
+}
+
+void openPairWindow(uint32_t now) {
+  pairWindow.open(now);
+  Serial.printf("pairing window open (%lu s)\n", static_cast<unsigned long>(cfg::PAIR_WINDOW_MS / 1000));
+  if (unitLinkUp && !unitLink.bound()) unitLink.startBindScan(now);
+}
+
+void forgetHa() {
+  store.clearHaKey();
+  // The HA service (Task 9) must also drop its current session here.
+  Serial.println("Home Assistant pairing cleared");
+}
+
 void reboot(const char* why) {
   Serial.printf("rebooting (%s)\n", why);
   Serial.flush();
   ESP.restart();
 }
 
+// AC console commands: "pair" opens the pairing window (binds the AC unit if none is bound, lets
+// HA pair), "forget-ac" drops the bound unit, "unpair" clears the HA pairing.
+bool handleAcCommand(const char* cmd) {
+  uint32_t now = millis();
+  if (std::strcmp(cmd, "pair") == 0) {
+    openPairWindow(now);
+  } else if (std::strcmp(cmd, "forget-ac") == 0) {
+    unitLink.forget();
+    store.clearUnitAddress();
+    Serial.println("AC unit forgotten; 'pair' binds one again");
+  } else if (std::strcmp(cmd, "unpair") == 0) {
+    forgetHa();
+  } else {
+    return false;
+  }
+  return true;
+}
+
 // Serial console: one command per line. "zero" sets pitch and roll zero where the sensor sits;
-// "reboot" restarts the board.
+// "reboot" restarts the board. AC builds add handleAcCommand's.
 void handleCommand(const char* cmd) {
+  if (cfg::AC_BRIDGE_ENABLED && handleAcCommand(cmd)) return;
   if (std::strcmp(cmd, "zero") == 0) {
     Serial.println(node->zeroHere() ? "zero set (pitch and roll)"
                                     : "zero rejected: sensor moving or not ready, hold it still and retry");
   } else if (std::strcmp(cmd, "reboot") == 0) {
     reboot("serial");
   } else {
-    Serial.printf("unknown command '%s' (commands: zero, reboot)\n", cmd);
+    Serial.printf("unknown command '%s' (commands: zero, reboot%s)\n", cmd,
+                  cfg::AC_BRIDGE_ENABLED ? ", pair, forget-ac, unpair" : "");
   }
 }
 
@@ -218,6 +280,19 @@ void setup() {
       }
     }
   }
+  if constexpr (cfg::AC_BRIDGE_ENABLED) {
+    uint8_t addr[6], type, key[32];
+    bool haveUnit = store.loadUnitAddress(addr, type);
+    bool haveHa = store.loadHaKey(key);
+    std::memset(key, 0, sizeof key);
+    if (!bleServerUp || !unitLink.begin(bridge)) {
+      Serial.println("AC unit link init failed");
+    } else {
+      unitLinkUp = true;
+      if (haveUnit) unitLink.bindTo(NimBLEAddress(addr, type));
+    }
+    if (!haveUnit && !haveHa) openPairWindow(millis());  // first boot: nothing to pair with yet
+  }
   Serial.printf("RV-C level sensor %s firmware %s (slot %u)\n", productId, kFwVersion, OtaFlash::runningSlot());
   onTrial = OtaFlash::runningOnTrial();
   if (onTrial) Serial.println("new firmware on trial: confirms once claimed and reading, else rolls back at 60 s");
@@ -230,8 +305,10 @@ void loop() {
   rvc::CanFrame f;
   uint32_t wait = level::msUntilDue(millis(), lastSampleMs, cfg::SAMPLE_PERIOD_MS);
   if (can.receive(f, wait)) {
-    node->onFrame(f, millis());
-    while (can.receive(f)) node->onFrame(f, millis());
+    do {
+      node->onFrame(f, millis());
+      if constexpr (cfg::AC_BRIDGE_ENABLED) acPanel.onFrame(f, millis());
+    } while (can.receive(f));
   }
   uint32_t now = millis();
 
@@ -272,7 +349,17 @@ void loop() {
       fastCpu = open;
     }
   }
-  if (bleServerUp) bleServer.poll();  // after bleOta.poll, which sets what it wants
+  if constexpr (cfg::AC_BRIDGE_ENABLED) {
+    if (unitLinkUp) unitLink.poll(now);  // before bleServer.poll, which acts on its slot reservation
+    bridge.tick(now);
+    acPanel.update(node->claimed(), node->address(), now);
+    uint8_t addr[6], type;
+    if (unitLink.takeNewBinding(addr, type)) store.saveUnitAddress(addr, type);
+    bool pairOpen = pairWindow.isOpen(now);
+    if (pairWasOpen && !pairOpen) Serial.println("pairing window closed");
+    pairWasOpen = pairOpen;
+  }
+  if (bleServerUp) bleServer.poll();  // after bleOta.poll and unitLink.poll, which set what they want
 
   LedMode mode = LedMode::Level;
   if ((cfg::LEVELING_ENABLED && health.faulted()) || can.busOff()) {
@@ -289,5 +376,6 @@ void loop() {
   if (now - lastPrintMs >= 1000) {
     lastPrintMs = now;
     printSummary();
+    if constexpr (cfg::AC_BRIDGE_ENABLED) printAcSummary(now);
   }
 }

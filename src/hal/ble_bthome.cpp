@@ -27,7 +27,7 @@ bool BleBthome::begin(const char* name, uint32_t advIntervalMs, uint32_t refresh
 void BleBthome::update(const bthome::Reading& r, uint32_t nowMs) {
   if (adv_ == nullptr) return;
   if (!schedule_.refreshDue(nowMs)) return;
-  heal();
+  if (!ownerHeals_) heal();
 
   uint8_t body[bthome::kMaxBody];
   size_t n = enc_.encode(r, body, sizeof body);
@@ -44,7 +44,7 @@ void BleBthome::update(const bthome::Reading& r, uint32_t nowMs) {
 void BleBthome::update(uint32_t nowMs) {
   if (adv_ == nullptr) return;
   if (!schedule_.refreshDue(nowMs)) return;
-  heal();
+  if (!ownerHeals_) heal();
   if (!schedule_.shouldSend(!started_, nowMs)) return;  // nothing changes; re-applied every reapplyMs
   apply(nullptr, 0);
 }
@@ -75,7 +75,6 @@ bool BleBthome::start() {
   return adv_->start();
 }
 
-// Restart advertising if something stopped it (a connection, a failed start).
 void BleBthome::heal() {
   if (started_ && !adv_->isAdvertising()) start();
 }
