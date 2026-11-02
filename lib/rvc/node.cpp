@@ -89,11 +89,13 @@ void Node::update(const SensorSnapshot& s, uint32_t nowMs) {
   if (!claimer_.ready(nowMs)) return;
 
   mp_.poll(nowMs, claimer_.address(), tx_);
-  maybeSendStatus(nowMs);
+  if (cfg_.leveling) maybeSendStatus(nowMs);
   maybeSendDmRv(nowMs);
-  maybeSendConfigStatus(kPitch, nowMs);
-  maybeSendConfigStatus(kRoll, nowMs);
-  maybeSendWheelStatus(nowMs);
+  if (cfg_.leveling) {
+    maybeSendConfigStatus(kPitch, nowMs);
+    maybeSendConfigStatus(kRoll, nowMs);
+    maybeSendWheelStatus(nowMs);
+  }
 }
 
 void Node::onFrame(const CanFrame& f, uint32_t nowMs) {
@@ -115,9 +117,11 @@ void Node::onFrame(const CanFrame& f, uint32_t nowMs) {
     return;
   }
   if (base == dgn::PROPRIETARY_A2) {
+    if (!cfg_.leveling) return;
     if (dest == ADDR_GLOBAL || dest == claimer_.address() || dest == dgn::LEVEL_FIXED_DA) handleBlockCommand(f, nowMs);
     return;
   }
+  if (!cfg_.leveling) return;
   if (h.dgn == dgn::PITCH_CONFIG_COMMAND) handleConfigCommand(kPitch, h.sa, f);
   if (h.dgn == dgn::ROLL_CONFIG_COMMAND) handleConfigCommand(kRoll, h.sa, f);
 }
@@ -141,25 +145,26 @@ void Node::handleRequest(uint8_t requester, uint8_t dest, const RequestMsg& req,
       if (directed) sendDmRv(nowMs);
       return;
     case dgn::LEVELING_SENSOR_STATUS:
-      if (anyInstance) {
+      if (cfg_.leveling && anyInstance) {
         sendStatus(nowMs);
         return;
       }
       break;
     case dgn::PITCH_CONFIG_STATUS:
-      if (anyInstance || req.instance == 0) {
+      if (cfg_.leveling && (anyInstance || req.instance == 0)) {
         sendConfigStatus(kPitch, nowMs);
         return;
       }
       break;
     case dgn::ROLL_CONFIG_STATUS:
-      if (anyInstance || req.instance == 0) {
+      if (cfg_.leveling && (anyInstance || req.instance == 0)) {
         sendConfigStatus(kRoll, nowMs);
         return;
       }
       break;
     case dgn::PROPRIETARY_A2:      // J1939 writes a PDU1 PGN with a 00h low byte
     case dgn::LEVEL_WHEEL_STATUS:  // global or directed, any instance
+      if (!cfg_.leveling) break;  // unknown DGN here: NAK below
       sendWheelStatus(nowMs);
       sendWheelConfig();
       return;
@@ -235,7 +240,7 @@ bool Node::sendStatus(uint32_t nowMs) {
 }
 
 void Node::maybeSendDmRv(uint32_t nowMs) {
-  bool fault = snap_.faulted;
+  bool fault = dmFault();
   uint32_t interval = fault ? cfg_.dmRvFaultIntervalMs : cfg_.dmRvOkIntervalMs;
   if (!dmSent_ || fault != lastDmFault_ || nowMs - lastDmMs_ >= interval) sendDmRv(nowMs);
 }
@@ -243,10 +248,10 @@ void Node::maybeSendDmRv(uint32_t nowMs) {
 bool Node::sendDmRv(uint32_t nowMs) {
   CanFrame f;
   f.id = makeId(prio::NORMAL, dgn::DM_RV, claimer_.address());
-  packDmRv({cfg_.dsa, snap_.faulted, kSpnAdc, kFmiBadDevice}, f.data);
+  packDmRv({cfg_.dsa, dmFault(), kSpnAdc, kFmiBadDevice}, f.data);
   if (!tx_.send(f)) return false;
   dmSent_ = true;
-  lastDmFault_ = snap_.faulted;
+  lastDmFault_ = dmFault();
   lastDmMs_ = nowMs;
   return true;
 }

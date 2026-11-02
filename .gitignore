@@ -4,3 +4,4 @@ __pycache__/
 src/fw_version.cpp
 src/ota_pubkey.cpp
 *.pem
+countrypro/

@@ -20,6 +20,7 @@ struct NodeConfig {
   uint8_t saLow = 176;
   uint8_t instance = 1;
   uint8_t dsa = 81;
+  bool leveling = true;  // false: no leveling DGNs, commands or faults (AC-only build)
   const char* productId = "***";
   uint32_t statusMinGapMs = 100;
   uint32_t statusHeartbeatMs = 1000;
@@ -96,6 +97,7 @@ class Node {
   void maybeSendConfigStatus(int axis, uint32_t nowMs);
   bool sendStatus(uint32_t nowMs);
   bool sendDmRv(uint32_t nowMs);
+  bool dmFault() const { return cfg_.leveling && snap_.faulted; }  // the IMU fault is a leveling fault
   bool sendConfigStatus(int axis, uint32_t nowMs);
   void sendAck(uint8_t code, uint8_t dest, uint32_t ackedDgn);
   void sendProductId();

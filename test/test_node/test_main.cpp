@@ -921,6 +921,44 @@ void test_general_reset_reboot_and_bootloader_reboots() {
   TEST_ASSERT_TRUE(n.rebootDue(550));
 }
 
+// ---- leveling disabled (AC-only build) ----
+
+void test_no_leveling_claims_and_answers_product_id() {
+  NodeConfig c = config();
+  c.leveling = false;
+  Node n(c, Settings{}, bus, store);
+  claim(n);
+  n.onFrame(request(SA, dgn::PRODUCT_ID), 300);
+  for (uint32_t t = 300; t <= 600; t += 10) n.update(SensorSnapshot{}, t);
+  TEST_ASSERT_EQUAL(1, bus.count(dgn::INITIAL_PACKET | 0xFF));
+  TEST_ASSERT_EQUAL(5, bus.count(dgn::DATA_PACKET | 0xFF));
+}
+
+void test_no_leveling_sends_no_leveling_dgns() {
+  NodeConfig c = config();
+  c.leveling = false;
+  Node n(c, Settings{}, bus, store);
+  claim(n);
+  for (uint32_t t = 260; t <= 5260; t += 10) n.update(SensorSnapshot{}, t);
+  TEST_ASSERT_EQUAL(0, bus.count(dgn::LEVELING_SENSOR_STATUS));
+  TEST_ASSERT_EQUAL(0, bus.count(dgn::LEVEL_WHEEL_STATUS));
+  TEST_ASSERT_EQUAL(0, bus.count(dgn::PITCH_CONFIG_STATUS));
+  auto dm = bus.withDgn(dgn::DM_RV);
+  TEST_ASSERT_GREATER_THAN(0, dm.size());
+  for (const auto& f : dm) TEST_ASSERT_EQUAL_HEX8(0x05, f.data[0]);  // ON, active, yellow lamp clear
+}
+
+void test_no_leveling_ignores_config_and_block_commands() {
+  NodeConfig c = config();
+  c.leveling = false;
+  Node n(c, Settings{}, bus, store);
+  claim(n);
+  n.onFrame(pitchCommand(1, 0x1234, 0x0800, 0), 300);
+  n.onFrame(blockCommand(0xFF, {0x4C, 0x56, 0x02, 0x14, 0x0C, 0x19, 0xFF, 0xFF}), 300);
+  TEST_ASSERT_EQUAL(0, bus.frames.size());
+  TEST_ASSERT_EQUAL(0, store.settingsSaves);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_only_claim_traffic_before_claimed);
@@ -994,5 +1032,8 @@ int main() {
   RUN_TEST(test_general_reset_bootloader_opens_window_when_bluetooth_up);
   RUN_TEST(test_general_reset_bootloader_reboots_without_bluetooth);
   RUN_TEST(test_general_reset_reboot_and_bootloader_reboots);
+  RUN_TEST(test_no_leveling_claims_and_answers_product_id);
+  RUN_TEST(test_no_leveling_sends_no_leveling_dgns);
+  RUN_TEST(test_no_leveling_ignores_config_and_block_commands);
   return UNITY_END();
 }

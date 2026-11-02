@@ -38,7 +38,7 @@ BleOta bleOta(otaFlash, ble, kFwVersion);
 bool bleOtaUp = false;  // BleOta::begin succeeded; its mutex exists only then
 bool fastCpu = false;   // at CPU_MHZ_UPDATE while the update window is open
 bool onTrial = false;       // booted a new image that hasn't confirmed itself yet
-bool imuValidSeen = false;  // part of the trial's health check
+bool imuValidSeen = !cfg::LEVELING_ENABLED;  // part of the trial's health check; no IMU to wait for without leveling
 
 #ifdef OTA_TEST_NEVER_CONFIRM
 constexpr bool kNeverConfirm = true;  // test build: proves rollback on the coach
@@ -174,6 +174,7 @@ void setup() {
   nc.saLow = cfg::SA_RANGE_LOW;
   nc.instance = cfg::SENSOR_INSTANCE;
   nc.dsa = cfg::DSA;
+  nc.leveling = cfg::LEVELING_ENABLED;
   nc.productId = productId;
   nc.statusMinGapMs = cfg::STATUS_MIN_GAP_MS;
   nc.statusHeartbeatMs = cfg::STATUS_HEARTBEAT_MS;
@@ -188,9 +189,11 @@ void setup() {
   node = &n;
 
   if (!can.begin(cfg::PIN_CAN_TX, cfg::PIN_CAN_RX)) Serial.println("TWAI init failed");
-  if (!mpu.begin(Wire)) {
-    Serial.printf("MPU-6050 init failed (WHO_AM_I=0x%02X)\n", mpu.whoAmI());
-    health.markFaulted(millis());
+  if constexpr (cfg::LEVELING_ENABLED) {
+    if (!mpu.begin(Wire)) {
+      Serial.printf("MPU-6050 init failed (WHO_AM_I=0x%02X)\n", mpu.whoAmI());
+      health.markFaulted(millis());
+    }
   }
   if constexpr (cfg::BLE_ENABLED) {
     if (!ble.begin(cfg::BLE_NAME, cfg::BLE_ADV_INTERVAL_MS, cfg::BLE_REFRESH_MS, cfg::BLE_REAPPLY_MS)) {
@@ -228,11 +231,15 @@ void loop() {
 
   if (now - lastSampleMs >= cfg::SAMPLE_PERIOD_MS) {
     lastSampleMs = now;
-    sampleSensor(now);
-    rvc::SensorSnapshot s = snapshot(now);
-    if (s.valid) imuValidSeen = true;
+    rvc::SensorSnapshot s;
+    if constexpr (cfg::LEVELING_ENABLED) {
+      sampleSensor(now);
+      s = snapshot(now);
+      if (s.valid) imuValidSeen = true;
+    }
     node->update(s, now);
-    if constexpr (cfg::BLE_ENABLED) ble.update(bleReading(s), now);
+    // Task 7 reworks the advert; without leveling there is no leveling data to broadcast yet.
+    if constexpr (cfg::BLE_ENABLED && cfg::LEVELING_ENABLED) ble.update(bleReading(s), now);
   }
   if (node->rebootDue(now)) reboot("GENERAL_RESET");
   settleTrial(now);
@@ -251,11 +258,11 @@ void loop() {
   }
 
   LedMode mode = LedMode::Level;
-  if (health.faulted() || can.busOff()) {
+  if ((cfg::LEVELING_ENABLED && health.faulted()) || can.busOff()) {
     mode = LedMode::Fault;
   } else if (!node->claimed()) {
     mode = LedMode::Claiming;
-  } else if (node->bits().any()) {
+  } else if (cfg::LEVELING_ENABLED && node->bits().any()) {
     mode = LedMode::OutOfLevel;
   }
   led.update(mode, now);

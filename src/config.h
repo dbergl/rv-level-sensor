@@ -3,12 +3,24 @@
 
 #include "attitude.h"
 
+// Build options (platformio.ini envs): leveling sensor, CountryModPro AC bridge, or both.
+#ifndef RVL_LEVELING
+#define RVL_LEVELING 1
+#endif
+#ifndef RVL_AC_BRIDGE
+#define RVL_AC_BRIDGE 1
+#endif
+
 // Compile-time configuration for the RV-C leveling sensor.
 namespace cfg {
 
+constexpr bool LEVELING_ENABLED = RVL_LEVELING != 0;
+constexpr bool AC_BRIDGE_ENABLED = RVL_AC_BRIDGE != 0;
+static_assert(LEVELING_ENABLED || AC_BRIDGE_ENABLED, "enable leveling, the AC bridge, or both");
+
 // Identity (PRODUCT_ID = MAKE*MODEL*<MAC>*)
 constexpr const char* MAKE = "DIY";
-constexpr const char* MODEL = "LEVEL-MPU6050";
+constexpr const char* MODEL = !AC_BRIDGE_ENABLED ? "LEVEL-MPU6050" : !LEVELING_ENABLED ? "AC-COUNTRYMOD" : "LEVEL-AC";
 constexpr uint16_t MANUFACTURER_CODE = 0;  // no SAE/RVIA code assigned
 constexpr uint8_t SENSOR_INSTANCE = 1;
 constexpr uint8_t DSA = 81;  // leveling system (no DSA exists for a standalone sensor)
