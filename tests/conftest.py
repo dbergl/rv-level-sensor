@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from homeassistant.const import STATE_OFF, STATE_ON
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -15,6 +17,9 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 @pytest.fixture(autouse=True)
 def auto_mock_bluetooth(mock_bluetooth):
     """rv_level depends on bluetooth; keep its scanner and adapters off the host."""
+    # mock_bluetooth leaves the scanner's BlueZ stop_discovery real; it logs an ERROR.
+    with patch("habluetooth.scanner_bleak.stop_discovery", AsyncMock()):
+        yield
 
 
 @pytest.fixture(autouse=True)

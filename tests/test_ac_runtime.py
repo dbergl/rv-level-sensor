@@ -295,6 +295,16 @@ async def test_disconnect_goes_unavailable_and_reconnects(hass, runtime, esp, de
     assert esp.nonces[0] != esp.nonces[1]
 
 
+async def test_status_is_dropped_with_the_link(hass, runtime, esp, delays):
+    """A status from an old link must never pass as live after a reconnect."""
+    esp.link.drop()
+    assert runtime.status is None
+    esp.status = status_bytes(setpoint=66)
+    await advance(hass, 1)
+    assert runtime.available
+    assert runtime.status.setpoint_f == 66
+
+
 async def test_reconnect_backoff_doubles_to_60_and_resets(hass, esp, delays):
     esp.fail_connects = 9
     runtime = AcRuntime(hass, ADDRESS, KEY)

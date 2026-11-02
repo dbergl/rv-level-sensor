@@ -99,6 +99,28 @@
       },
       "blocks_rr": {
         "name": "Blocks RR"
+      },
+      "mode": {
+        "name": "Mode",
+        "state": {
+          "cool": "Cool",
+          "eco": "Eco",
+          "sleep": "Sleep",
+          "turbo": "Turbo",
+          "fan_only": "Fan only"
+        }
+      },
+      "air_temperature": {
+        "name": "Air temperature"
+      },
+      "battery_voltage": {
+        "name": "Battery voltage"
+      },
+      "low_voltage_protection": {
+        "name": "Low voltage protection"
+      },
+      "status_frame": {
+        "name": "Status frame"
       }
     },
     "binary_sensor": {
@@ -113,6 +135,15 @@
       },
       "short_on_blocks": {
         "name": "Short On Blocks"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "unit_in_celsius": {
+        "name": "Unit in Celsius"
+      },
+      "ac_responding": {
+        "name": "AC responding"
       }
     },
     "number": {
@@ -130,6 +161,49 @@
       },
       "blocks_carried": {
         "name": "Blocks Carried"
+      },
+      "setpoint": {
+        "name": "Setpoint"
+      }
+    },
+    "select": {
+      "operating_mode": {
+        "name": "Operating mode",
+        "state": {
+          "cool": "Cool",
+          "eco": "Eco",
+          "sleep": "Sleep",
+          "turbo": "Turbo",
+          "fan_only": "Fan only"
+        }
+      },
+      "fan_level": {
+        "name": "Fan level",
+        "state": {
+          "auto": "Auto",
+          "1": "1",
+          "2": "2",
+          "3": "3",
+          "4": "4",
+          "5": "5"
+        }
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Power"
+      },
+      "display_in_celsius": {
+        "name": "Display in Celsius"
+      },
+      "light": {
+        "name": "Light"
+      },
+      "display": {
+        "name": "Display"
+      },
+      "vent_oscillation": {
+        "name": "Vent oscillation"
       }
     }
   },

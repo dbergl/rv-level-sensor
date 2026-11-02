@@ -30,11 +30,59 @@
       },
       "blocks_rr": {
         "default": "mdi:layers-triple"
+      },
+      "mode": {
+        "default": "mdi:snowflake"
+      },
+      "battery_voltage": {
+        "default": "mdi:car-battery"
+      },
+      "low_voltage_protection": {
+        "default": "mdi:battery-alert-variant-outline"
+      },
+      "status_frame": {
+        "default": "mdi:code-brackets"
       }
     },
     "binary_sensor": {
       "level": {
         "default": "mdi:thumb-up"
+      },
+      "power": {
+        "default": "mdi:power"
+      },
+      "unit_in_celsius": {
+        "default": "mdi:temperature-celsius"
+      }
+    },
+    "number": {
+      "setpoint": {
+        "default": "mdi:thermometer"
+      }
+    },
+    "select": {
+      "operating_mode": {
+        "default": "mdi:snowflake"
+      },
+      "fan_level": {
+        "default": "mdi:fan"
+      }
+    },
+    "switch": {
+      "power": {
+        "default": "mdi:power"
+      },
+      "display_in_celsius": {
+        "default": "mdi:temperature-celsius"
+      },
+      "light": {
+        "default": "mdi:lightbulb"
+      },
+      "display": {
+        "default": "mdi:monitor"
+      },
+      "vent_oscillation": {
+        "default": "mdi:arrow-oscillating"
       }
     }
   }

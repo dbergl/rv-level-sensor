@@ -195,8 +195,13 @@ async def test_ac_only_without_leveling_device(hass, esp, discovered):
     assert isinstance(runtime, AcRuntime)
     assert runtime.available
     assert "rv-level" not in hass.data[LOVELACE_DATA].dashboards
-    # Task 13 adds the AC entities; until then none, and no leveling ones.
-    assert er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id) == []
+    # Only the AC entities, fed end to end from the fake ESP32's status.
+    entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    assert len(entities) == 17
+    assert all(".countrymodpro" in e.entity_id for e in entities)
+    climate = hass.states.get("climate.countrymodpro")
+    assert climate.state == "cool"
+    assert hass.states.get("sensor.countrymodpro_battery_voltage").state == "13"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await settle(hass)

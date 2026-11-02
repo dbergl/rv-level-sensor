@@ -99,6 +99,8 @@ class AcRuntime:
     def _set_open(self, is_open: bool) -> None:
         if self._open != is_open:
             self._open = is_open
+            if not is_open:
+                self.status = None  # never shown as live after a reconnect
             self._notify()
 
     def _start_connect(self) -> None:
