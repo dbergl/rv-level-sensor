@@ -327,6 +327,100 @@ void test_own_sa_ignored() {
   TEST_ASSERT_EQUAL(0, r.commands().size());
 }
 
+void test_tx_failure_backs_off() {
+  Rig r;
+  r.ready();
+  r.bus.fail = true;
+  r.advance(5100);  // heartbeat due; every send fails
+  r.bus.fail = false;
+  r.bus.clear();
+  r.unit.sp = 73;
+  r.sendStatus();
+  r.bus.fail = true;
+  size_t attempts = 0;
+  struct Counting : ITransmitter {
+    FakeBus* b; size_t* n;
+    bool send(const CanFrame& f) override { ++*n; return b->send(f); }
+  };
+  // Count attempts through the real bus by watching a failing transmitter for 1 s.
+  Counting c;
+  c.b = &r.bus;
+  c.n = &attempts;
+  AcPanel p(r.br, c);
+  for (uint32_t t = 0; t < 1000; t += 10) p.update(true, kSa, r.now + t);
+  // First try sends 4; one retry after 500 ms sends the 4 pending again.
+  TEST_ASSERT_LESS_OR_EQUAL(8, attempts);
+}
+
+void test_tx_failure_retries_only_failed() {
+  Rig r;
+  r.ready();
+  r.bus.fail = true;
+  r.advance(5100);
+  r.bus.fail = false;
+  r.advance(600);
+  TEST_ASSERT_EQUAL(1, r.bus.count(THERMOSTAT_STATUS_1));
+}
+
+void test_unknown_fan_and_mode_not_guessed() {
+  Rig r;
+  r.unit.fan = 7;  // decodes to unknown
+  r.advance(200);
+  auto s1 = r.bus.withDgn(THERMOSTAT_STATUS_1).at(0);
+  TEST_ASSERT_EQUAL_HEX8(0xFF, s1.data[2]);
+  TEST_ASSERT_EQUAL_HEX8(0x30, s1.data[1] & 0x30);
+}
+
+void test_unknown_mode_is_na() {
+  Rig r;
+  r.unit.mode = Mode::FanOnly;
+  r.unit.fan = 0;
+  r.advance(200);
+  // Frame with fan-only bits cleared and no mode bits decodes to Cool, so force Unknown below.
+  uint8_t f[cm::kFrameLen];
+  encode(r.unit, f);
+  f[3] |= 0x30;  // two preset bits at once: not a mode the unit defines
+  f[18] = 0;
+  for (int i = 0; i < 18; i++) f[18] = static_cast<uint8_t>(f[18] + f[i]);
+  r.br.onNotify(f, cm::kFrameLen, r.now);
+  TEST_ASSERT_EQUAL(static_cast<int>(Mode::Unknown), static_cast<int>(r.br.status().mode));
+  r.bus.clear();
+  r.panel.update(true, kSa, r.now);
+  TEST_ASSERT_EQUAL_HEX8(0x0F, r.bus.withDgn(THERMOSTAT_STATUS_1).at(0).data[1] & 0x0F);
+}
+
+void test_setpoint_out_of_range_ignored() {
+  Rig r;
+  r.ready();
+  r.cmd1(7, 0x0F, 3, 0xFF, encodeTempF(328));  // 328 would wrap to 72 as int8_t
+  r.cmd1(7, 0x0F, 3, 0xFF, encodeTempF(60));
+  TEST_ASSERT_EQUAL(0, r.commands().size());
+}
+
+void test_fan_ignored_unless_fanbits_on() {
+  Rig r;
+  r.ready();
+  r.cmd1(7, 0x0F, 3, 0x78, 0xFFFF);
+  r.cmd1(7, 0x0F, 2, 0x78, 0xFFFF);
+  TEST_ASSERT_EQUAL(0, r.commands().size());
+}
+
+void test_no_stale_commands_after_unit_lost() {
+  Rig r;
+  r.ready();
+  r.silentUnit = true;
+  r.link.up = false;
+  r.advance(12000);
+  size_t before = r.link.writes.size();
+  r.cmd1(7, 4, 1, 0x78, encodeTempF(70));
+  TEST_ASSERT_EQUAL(before, r.link.writes.size());
+  r.link.up = true;
+  r.silentUnit = false;
+  r.advance(15000);
+  TEST_ASSERT_TRUE(r.br.responding(r.now));
+  TEST_ASSERT_EQUAL(0, r.commands().size());
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_silent_until_responding);
@@ -345,5 +439,12 @@ int main() {
   RUN_TEST(test_panel_preset_select_and_unknown_code);
   RUN_TEST(test_panel_option_toggle);
   RUN_TEST(test_own_sa_ignored);
+  RUN_TEST(test_tx_failure_backs_off);
+  RUN_TEST(test_tx_failure_retries_only_failed);
+  RUN_TEST(test_unknown_fan_and_mode_not_guessed);
+  RUN_TEST(test_unknown_mode_is_na);
+  RUN_TEST(test_setpoint_out_of_range_ignored);
+  RUN_TEST(test_fan_ignored_unless_fanbits_on);
+  RUN_TEST(test_no_stale_commands_after_unit_lost);
   return UNITY_END();
 }

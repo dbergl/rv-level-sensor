@@ -46,14 +46,18 @@ void AcPanel::onCommand1(const uint8_t* d, uint32_t nowMs) {
 
   if (c.fanBits == 0) {
     submit(ac::Op::Fan, 0, nowMs);
-  } else if (c.fanRaw > 0 && c.fanRaw <= 200) {
+  } else if (c.fanBits == 1 && c.fanRaw > 0 && c.fanRaw <= 200) {
     int n = (c.fanRaw + 20) / 40;  // 0.5 %/bit, 20 % per level
     submit(ac::Op::Fan, n < 1 ? 1 : n > 5 ? 5 : n, nowMs);
   }
 
   if (c.coolRaw == SETPOINT_UP) submit(ac::Op::StepSetpoint, 1, nowMs);
   else if (c.coolRaw == SETPOINT_DOWN) submit(ac::Op::StepSetpoint, -1, nowMs);
-  else if (c.coolRaw < 0xFE00) submit(ac::Op::Setpoint, decodeTempF(c.coolRaw), nowMs);
+  else if (c.coolRaw < 0xFE00) {
+    // Range-check here so garbage can't wrap through the int8_t intent value.
+    int f = decodeTempF(c.coolRaw);
+    if (f >= cm::kSetpointMinF && f <= cm::kSetpointMaxF) submit(ac::Op::Setpoint, f, nowMs);
+  }
 }
 
 void AcPanel::onCommand2(const uint8_t* d, uint32_t nowMs) {
@@ -94,9 +98,19 @@ void AcPanel::update(bool claimed, uint8_t sa, uint32_t nowMs) {
   ownSa_ = claimed ? sa : ADDR_NULL;
   if (!claimed || !bridge_.responding(nowMs)) {
     sent_ = false;
+    pending_ = 0;
     return;
   }
-  if (sent_ && bridge_.statusVersion() == sentVersion_ && nowMs - sentMs_ < kHeartbeatMs) return;
+  if (pending_) {
+    if (static_cast<int32_t>(nowMs - retryAt_) < 0) return;
+  } else if (sent_ && bridge_.statusVersion() == sentVersion_ && nowMs - sentMs_ < kHeartbeatMs) {
+    return;
+  } else {
+    pending_ = 0x0F;
+    sent_ = true;
+    sentVersion_ = bridge_.statusVersion();
+    sentMs_ = nowMs;
+  }
   sendStatus(sa, nowMs);
 }
 
@@ -107,32 +121,39 @@ void AcPanel::sendStatus(uint8_t sa, uint32_t nowMs) {
     switch (s.mode) {
       case cm::Mode::FanOnly: t.mode = kPanelModeFan; break;
       case cm::Mode::Dehumid: t.mode = 6; break;
+      case cm::Mode::Unknown: t.mode = 0x0F; break;  // n/a, never a guess
       default: t.mode = kPanelModeCool; break;
     }
-    if (s.fan >= 1 && s.fan <= 5) {
+    if (s.fan == 0) {
+      t.fanBits = 0;
+    } else if (s.fan <= 5) {
       t.fanBits = 1;
       t.fanRaw = static_cast<uint8_t>(s.fan * 0x28);
     } else {
-      t.fanBits = 0;  // auto, or not known yet
+      t.fanRaw = 0xFF;  // unknown: fanBits stays 3 (n/a)
     }
   }
   if (s.setpointF != 0xFF) t.coolF = s.setpointF;
+
   uint8_t d[8];
-  bool ok = true;
+  auto step = [&](uint8_t bit, uint32_t dgn) {
+    if (pending_ & bit) {
+      if (sendFrame(dgn, sa, d)) pending_ &= static_cast<uint8_t>(~bit);
+    }
+  };
   packThermoStatus1(t, d);
-  ok &= sendFrame(THERMOSTAT_STATUS_1, sa, d);
+  step(1, THERMOSTAT_STATUS_1);
   if (s.airTempF != 0xFF) {
     packAmbient(instance_, s.airTempF, d);
-    ok &= sendFrame(THERMOSTAT_AMBIENT_STATUS, sa, d);
+    step(2, THERMOSTAT_AMBIENT_STATUS);
+  } else {
+    pending_ &= ~2;
   }
   packThermoStatus2(instance_, s.power, s.power ? presetOf(s.mode) : Preset::None, d);
-  ok &= sendFrame(THERMOSTAT_STATUS_2, sa, d);
+  step(4, THERMOSTAT_STATUS_2);
   packOptionsStatus(instance_, s.oscillating, s.display, d);
-  ok &= sendFrame(FIREFLY_AC_OPTIONS_STATUS, sa, d);
-  if (!ok) return;  // retry next update
-  sent_ = true;
-  sentVersion_ = bridge_.statusVersion();
-  sentMs_ = nowMs;
+  step(8, FIREFLY_AC_OPTIONS_STATUS);
+  if (pending_) retryAt_ = nowMs + kRetryMs;
 }
 
 }  // namespace rvc

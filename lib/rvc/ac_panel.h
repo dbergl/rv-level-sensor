@@ -13,6 +13,7 @@ namespace rvc {
 class AcPanel {
  public:
   static constexpr uint32_t kHeartbeatMs = 5000;
+  static constexpr uint32_t kRetryMs = 500;  // back-off after a full TX queue
   static constexpr uint32_t kTagPanel = 0;  // results for these intents are discarded
 
   AcPanel(ac::Bridge& b, ITransmitter& tx, uint8_t instance = 7)
@@ -36,6 +37,8 @@ class AcPanel {
   bool sent_ = false;  // reset while silent so the first frame after a gap goes out at once
   uint32_t sentVersion_ = 0;
   uint32_t sentMs_ = 0;
+  uint8_t pending_ = 0;  // bit per status DGN still to send; only the failed ones are retried
+  uint32_t retryAt_ = 0;
 };
 
 }  // namespace rvc
