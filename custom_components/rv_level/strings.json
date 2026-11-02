@@ -33,7 +33,7 @@
       },
       "pair": {
         "title": "Pair with the AC bridge",
-        "description": "Type `pair` on the sensor's console, or power-cycle an unpaired sensor, then submit"
+        "description": "Type `pair` on the sensor's serial console, then submit within 2 minutes. A brand-new sensor opens the window by itself for 2 minutes."
       }
     },
     "abort": {
@@ -44,7 +44,7 @@
     },
     "flow_title": "{name}",
     "error": {
-      "pair_refused": "The AC bridge is not in pairing mode. Type `pair` on the sensor's console, or power-cycle an unpaired sensor, then submit again.",
+      "pair_refused": "The AC bridge is not in pairing mode. Type `pair` on the sensor's serial console, then submit again within 2 minutes.",
       "cannot_connect": "Could not reach the AC bridge. Make sure the sensor is powered and within Bluetooth range of Home Assistant, then submit again."
     }
   },

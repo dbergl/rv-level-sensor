@@ -39,7 +39,9 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 AUTH_TIMEOUT = 10
-COMMAND_TIMEOUT = 15
+# Longer than the bridge can take: up to 10 s to start (else it fails unwritten), then its
+# writes and retries. A timeout here never leaves a command that changes the unit later.
+COMMAND_TIMEOUT = 30
 PAIR_TIMEOUT = 15
 
 
@@ -129,7 +131,7 @@ class AcClient:
         hass: HomeAssistant,
         address: str,
         key: bytes,
-        on_status: Callable[[AcStatus], None],
+        on_status: Callable[[AcStatus | None], None],
         on_disconnect: Callable[[AcClient], None],
     ) -> None:
         self._hass = hass
@@ -221,8 +223,9 @@ class AcClient:
         try:
             status = unpack_status(bytes(data))
         except ValueError as err:
-            _LOGGER.warning("Ignoring AC status %s: %s", bytes(data).hex(), err)
-            return
+            # Not kept as the last good one: what the unit is doing now is unknown.
+            _LOGGER.warning("Bad AC status %s: %s", bytes(data).hex(), err)
+            status = None
         self._on_status(status)
 
     def _on_command(self, _char: Any, data: bytearray) -> None:

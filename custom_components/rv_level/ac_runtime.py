@@ -19,6 +19,8 @@ _LOGGER = logging.getLogger(__name__)
 
 BACKOFF_MIN = 1
 BACKOFF_MAX = 60
+# The bridge sends status at least every 5 s; silence this long means the session is dead.
+STATUS_STALE = 15
 
 type ClientFactory = Callable[..., AcClient]
 type AcConfigEntry = ConfigEntry[AcRuntime]
@@ -42,6 +44,7 @@ class AcRuntime:
         self._open = False
         self._backoff = BACKOFF_MIN
         self._cancel_retry: CALLBACK_TYPE | None = None
+        self._cancel_stale: CALLBACK_TYPE | None = None
         self._task: asyncio.Task | None = None
         self._stopping = False
         self._warned = False
@@ -57,6 +60,7 @@ class AcRuntime:
 
     async def async_stop(self) -> None:
         self._stopping = True
+        self._unwatch()
         if self._cancel_retry:
             self._cancel_retry()
             self._cancel_retry = None
@@ -99,9 +103,33 @@ class AcRuntime:
     def _set_open(self, is_open: bool) -> None:
         if self._open != is_open:
             self._open = is_open
-            if not is_open:
+            if is_open:
+                self._watch()
+            else:
+                self._unwatch()
                 self.status = None  # never shown as live after a reconnect
             self._notify()
+
+    def _watch(self) -> None:
+        """(Re)start the countdown to declaring the status stale."""
+        self._unwatch()
+        self._cancel_stale = async_call_later(self.hass, STATUS_STALE, self._stale)
+
+    def _unwatch(self) -> None:
+        if self._cancel_stale:
+            self._cancel_stale()
+            self._cancel_stale = None
+
+    @callback
+    def _stale(self, _now) -> None:
+        self._cancel_stale = None
+        client = self._client
+        if client is None or not self._open:
+            return
+        _LOGGER.info(
+            "AC bridge %s: no status for %s s, reconnecting", self._address, STATUS_STALE
+        )
+        self._lost(client)
 
     def _start_connect(self) -> None:
         self._task = self.hass.async_create_background_task(
@@ -134,8 +162,11 @@ class AcRuntime:
         self._set_open(True)
 
     @callback
-    def _on_status(self, status: AcStatus) -> None:
+    def _on_status(self, status: AcStatus | None) -> None:
+        """A status notification; None if it didn't parse (shown as unknown)."""
         self.status = status
+        if status is not None and self._open:
+            self._watch()
         self._notify()
 
     @callback

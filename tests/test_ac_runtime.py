@@ -188,7 +188,8 @@ def delays():
     real = ac_runtime.async_call_later
 
     def record(hass, delay, action):
-        recorded.append(delay)
+        if getattr(action, "__name__", "") == "_retry":  # not the status watchdog
+            recorded.append(delay)
         return real(hass, delay, action)
 
     with patch.object(ac_runtime, "async_call_later", record):
@@ -227,11 +228,67 @@ async def test_session_opens_and_status_notifies_listeners(hass, runtime, esp):
     assert len(calls) == 1
 
 
-async def test_malformed_status_is_ignored(hass, runtime, esp):
+async def test_malformed_status_clears_the_last_one(hass, runtime, esp):
+    calls = []
+    runtime.async_add_listener(lambda: calls.append(runtime.status))
     esp.link.push_status(b"\x01\x02")
     await settle(hass)
     assert runtime.available
-    assert runtime.status.setpoint_f == 72
+    assert runtime.status is None
+    assert calls == [None]
+
+
+async def tick(hass, freezer, seconds):
+    """Move the clock on and fire what is due: cumulative, unlike advance."""
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await settle(hass)
+
+
+async def test_silent_bridge_goes_stale_and_reconnects(hass, freezer, esp, delays):
+    runtime = AcRuntime(hass, ADDRESS, KEY)
+    await runtime.async_start()
+    await settle(hass)
+    calls = []
+    runtime.async_add_listener(lambda: calls.append(runtime.status))
+    await tick(hass, freezer, 10)
+    esp.link.push_status(status_bytes(setpoint=68))  # restarts the 15 s
+    await settle(hass)
+    await tick(hass, freezer, 14)
+    assert runtime.available
+    assert runtime.status.setpoint_f == 68
+    assert delays == []
+    await tick(hass, freezer, 2)
+    assert not runtime.available
+    assert runtime.status is None
+    assert calls[-1] is None
+    assert esp.links[0].connected is False
+    assert delays == [1]
+    await tick(hass, freezer, 1)
+    assert len(esp.links) == 2
+    assert runtime.available
+    assert runtime.status.setpoint_f == 72  # a new status clears it
+    await runtime.async_stop()
+
+
+async def test_garbled_status_alone_goes_stale(hass, freezer, esp, delays):
+    runtime = AcRuntime(hass, ADDRESS, KEY)
+    await runtime.async_start()
+    await settle(hass)
+    await tick(hass, freezer, 10)
+    esp.link.push_status(b"\x01\x02")  # doesn't count as hearing the bridge
+    await settle(hass)
+    await tick(hass, freezer, 6)
+    assert not runtime.available
+    assert delays == [1]
+    await runtime.async_stop()
+
+
+async def test_stale_watch_ends_with_stop(hass, runtime, esp, delays):
+    await runtime.async_stop()
+    await advance(hass, 30)
+    assert delays == []
+    assert len(esp.links) == 1
 
 
 async def test_session_needs_the_proof_accepted(hass, esp, delays):
