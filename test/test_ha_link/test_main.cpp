@@ -18,6 +18,7 @@ static const char* kPairKeyHex = "c727107d2c582dd9c86f513150a56d1043ed571501b60a
 static const char* kNonceHex = "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf";
 static const char* kMsgHex = "01000000020036e461c8a09b15adb32d84cfb276225c";
 static const char* kMacHex = "36e461c8a09b15adb32d84cfb276225c";
+static const char* kSessionProofHex = "6c5786a795708b586a4e97f451f2d872";
 
 static void hexTo(const char* hex, uint8_t* out, size_t n) {
   for (size_t i = 0; i < n; ++i) {
@@ -237,11 +238,22 @@ void test_pack_result() {
   TEST_ASSERT_EQUAL_HEX8_ARRAY(want, out, kResultLen);
 }
 
+static void test_session_proof_matches_vector() {
+  uint8_t want[16], got[16];
+  hexTo(kSessionProofHex, want, 16);
+  sessionProof(pairKey, nonce, got);
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(want, got, 16);
+  uint8_t mac[16];
+  commandMac(pairKey, nonce, 0, nullptr, 0, mac);  // domain-separated from the command MAC
+  TEST_ASSERT_FALSE(memcmp(mac, got, 16) == 0);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_pair_key_matches_vector);
   RUN_TEST(test_pair_rejects_low_order_peer_key);
   RUN_TEST(test_command_mac_matches_vector);
+  RUN_TEST(test_session_proof_matches_vector);
   RUN_TEST(test_session_accepts_increasing_counters);
   RUN_TEST(test_session_rejects_replay_and_bad_mac);
   RUN_TEST(test_pack_status_layout);

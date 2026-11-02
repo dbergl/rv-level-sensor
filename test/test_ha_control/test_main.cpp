@@ -76,12 +76,28 @@ struct Rig {
   void pairDirect() { ha.setKey(pairKey); }
   Auth auth(uint16_t h, const uint8_t* d, size_t n, bool open = false) { return ha.onAuth(h, d, n, open, out); }
   // Starts a session on h; returns the nonce it got.
-  void session(uint16_t h, uint8_t got[16]) {
+  void challenge(uint16_t h, uint8_t got[16]) {
     const uint8_t m[] = {HaControl::kSession};
-    TEST_ASSERT_EQUAL(Auth::Session, auth(h, m, 1));
+    TEST_ASSERT_EQUAL(Auth::Challenge, auth(h, m, 1));
     TEST_ASSERT_EQUAL_size_t(17, out.n);
     TEST_ASSERT_EQUAL_UINT16(h, out.h);
     memcpy(got, out.d + 1, 16);
+  }
+  // 03 || proof16 over n16 with the current key; returns the reply's status byte.
+  Auth prove(uint16_t h, const uint8_t n16[16], bool corrupt = false) {
+    uint8_t m[17] = {HaControl::kProve};
+    sessionProof(ha.key(), n16, m + 1);
+    if (corrupt) m[16] ^= 1;
+    Auth a = auth(h, m, sizeof m);
+    TEST_ASSERT_EQUAL_size_t(2, out.n);
+    TEST_ASSERT_EQUAL_HEX8(HaControl::kProve, out.d[0]);
+    TEST_ASSERT_EQUAL_HEX8(a == Auth::Session ? 1 : 0, out.d[1]);
+    return a;
+  }
+  void session(uint16_t h, uint8_t got[16]) {
+    challenge(h, got);
+    TEST_ASSERT_EQUAL(Auth::Session, prove(h, got));
+    TEST_ASSERT_EQUAL_UINT16(h, ha.sessionLink());
   }
   // counter || op || value || mac under the given nonce.
   size_t cmd(const uint8_t n16[16], uint32_t counter, uint8_t op, int8_t value, uint8_t msg[22]) {
@@ -173,7 +189,7 @@ static void test_session_refused_without_key() {
 static void test_unknown_auth_write_ignored() {
   Rig r;
   r.pairDirect();
-  const uint8_t m[] = {0x03};
+  const uint8_t m[] = {0x04};
   TEST_ASSERT_EQUAL(Auth::None, r.auth(kHa, m, 1));
   TEST_ASSERT_EQUAL_size_t(0, r.out.n);
   const uint8_t s[] = {HaControl::kSession, 0x00};  // trailing byte
@@ -272,6 +288,78 @@ static void test_new_session_on_same_link_restarts_counter_and_nonce() {
   r.expectResult(kHa, 1, Result::Unreachable);
 }
 
+// A stranger without the key: its 02 and bad 03 leave HA's session and link alone, its commands
+// get BadAuth, and it never gets status.
+static void test_stranger_cannot_touch_the_session() {
+  Rig r;
+  r.pairDirect();
+  uint8_t a[16], b[16], m[22];
+  r.session(kHa, a);
+  TEST_ASSERT_TRUE(r.ha.statusDue(r.now, r.out));
+  r.challenge(kOther, b);
+  TEST_ASSERT_EQUAL_UINT16(kHa, r.ha.sessionLink());
+  TEST_ASSERT_EQUAL_UINT16(HaControl::kNoLink, r.ha.takeDrop());
+  TEST_ASSERT_EQUAL(Auth::Refused, r.prove(kOther, b, true));
+  TEST_ASSERT_EQUAL_UINT16(kHa, r.ha.sessionLink());
+  TEST_ASSERT_EQUAL_UINT16(HaControl::kNoLink, r.ha.takeDrop());
+  TEST_ASSERT_EQUAL(Auth::Refused, r.prove(kOther, b));  // challenge used up by the bad try
+  TEST_ASSERT_EQUAL_UINT16(kHa, r.ha.sessionLink());
+  r.cmd(a, 1, uint8_t(Op::Power), 1, m);
+  r.command(kOther, m, sizeof m);  // even HA's own valid message, from the wrong link
+  r.expectReply(kOther, 1, Result::BadAuth);
+  TEST_ASSERT_FALSE(r.ha.statusDue(r.now + 100, r.out));
+  TEST_ASSERT_TRUE(r.ha.statusDue(r.now + 5000, r.out));
+  TEST_ASSERT_EQUAL_UINT16(kHa, r.out.h);  // status only ever to the proven link
+  r.command(kHa, m, sizeof m);
+  TEST_ASSERT_EQUAL_size_t(0, r.out.n);
+  r.expectResult(kHa, 1, Result::Unreachable);
+}
+
+static void test_unproven_link_never_gets_status() {
+  Rig r;
+  r.pairDirect();
+  uint8_t b[16];
+  r.challenge(kOther, b);
+  TEST_ASSERT_EQUAL_UINT16(HaControl::kNoLink, r.ha.sessionLink());
+  TEST_ASSERT_FALSE(r.ha.statusDue(r.now, r.out));
+  TEST_ASSERT_FALSE(r.ha.statusDue(r.now + 10000, r.out));
+}
+
+static void test_prove_refusals() {
+  Rig r;
+  uint8_t n16[16];
+  const uint8_t no[17] = {HaControl::kProve};
+  TEST_ASSERT_EQUAL(Auth::Refused, r.auth(kHa, no, sizeof no));  // no key, no challenge
+  TEST_ASSERT_EQUAL_size_t(2, r.out.n);
+  TEST_ASSERT_EQUAL_HEX8(0, r.out.d[1]);
+  r.pairDirect();
+  TEST_ASSERT_EQUAL(Auth::Refused, r.prove(kHa, nonce));  // no challenge yet
+  r.challenge(kHa, n16);
+  uint8_t m[17] = {HaControl::kProve};
+  sessionProof(pairKey, n16, m + 1);
+  TEST_ASSERT_EQUAL(Auth::Refused, r.auth(kHa, m, 16));  // wrong length uses up the challenge
+  TEST_ASSERT_EQUAL(Auth::Refused, r.prove(kHa, n16));
+  r.challenge(kHa, n16);
+  r.ha.onDisconnect(kHa);  // a disconnect clears the challenge
+  TEST_ASSERT_EQUAL(Auth::Refused, r.prove(kHa, n16));
+  uint8_t old16[16];
+  r.challenge(kHa, old16);
+  r.challenge(kHa, n16);  // replaces the first
+  TEST_ASSERT_EQUAL(Auth::Refused, r.prove(kHa, old16));
+  TEST_ASSERT_EQUAL_UINT16(HaControl::kNoLink, r.ha.sessionLink());
+}
+
+static void test_challenge_is_per_link() {
+  Rig r;
+  r.pairDirect();
+  uint8_t a[16], b[16];
+  r.challenge(kHa, a);
+  r.challenge(kOther, b);
+  TEST_ASSERT_EQUAL(Auth::Refused, r.prove(kOther, a));  // the other link's nonce: no
+  TEST_ASSERT_EQUAL(Auth::Session, r.prove(kHa, a));
+}
+
+// A second link that proves the key takes over; the old link is dropped.
 static void test_session_from_another_link_replaces_and_drops_the_old() {
   Rig r;
   r.pairDirect();
@@ -419,6 +507,10 @@ int main() {
   RUN_TEST(test_unknown_op_gets_bad_auth);
   RUN_TEST(test_command_from_another_link_gets_bad_auth);
   RUN_TEST(test_new_session_on_same_link_restarts_counter_and_nonce);
+  RUN_TEST(test_stranger_cannot_touch_the_session);
+  RUN_TEST(test_unproven_link_never_gets_status);
+  RUN_TEST(test_prove_refusals);
+  RUN_TEST(test_challenge_is_per_link);
   RUN_TEST(test_session_from_another_link_replaces_and_drops_the_old);
   RUN_TEST(test_disconnect_ends_session);
   RUN_TEST(test_forget_clears_key_and_drops_session);

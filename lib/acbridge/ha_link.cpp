@@ -10,6 +10,7 @@ namespace {
 
 const char kPairLabel[] = "RVL-AC-PAIR-v1";
 const char kCmdLabel[] = "RVL-AC-CMD-v1";
+const char kSessionLabel[] = "RVL-AC-SESSION-v1";
 
 void putU32(uint8_t* p, uint32_t v) {
   for (int i = 0; i < 4; ++i) p[i] = uint8_t(v >> (8 * i));
@@ -64,6 +65,14 @@ void commandMac(const uint8_t key[32], const uint8_t nonce[16], uint32_t counter
   crypto_blake2b_update(&ctx, ctr, sizeof ctr);
   crypto_blake2b_update(&ctx, body, n);
   crypto_blake2b_final(&ctx, mac);
+}
+
+void sessionProof(const uint8_t key[32], const uint8_t nonce[16], uint8_t out[16]) {
+  crypto_blake2b_ctx ctx;
+  crypto_blake2b_keyed_init(&ctx, kMacLen, key, kKeyLen);
+  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(kSessionLabel), sizeof kSessionLabel - 1);
+  crypto_blake2b_update(&ctx, nonce, kNonceLen);
+  crypto_blake2b_final(&ctx, out);
 }
 
 void Session::begin(const uint8_t nonce[16]) {

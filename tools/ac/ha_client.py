@@ -9,13 +9,14 @@
   uv run tools/ac/ha_client.py status [--watch 30]   # session, read status, print notifications
   uv run tools/ac/ha_client.py cmd power 1           # session, one command, print its result
   uv run tools/ac/ha_client.py cmd setpoint 72 --replay   # then resend it: expect BadAuth
+  uv run tools/ac/ha_client.py stranger [--hold 60]  # no key: 02 + bad 03 + a command; must not lock HA out
 
 Ops: power, mode (0 cool, 1 eco, 2 sleep, 3 turbo, 4 fan), fan (0 auto, 1-5), setpoint (°F),
 step (+1/-1), display, oscillate, light, celsius (0/1), clear_preset (value ignored).
 
 The pairing key lives in --key-file (default ~/.config/rv-level/ha_pair.json). Every connection
-is a new session with a new nonce, so the counter restarts at 1; the file records the last
-session's nonce and counter.
+proves the key (02 challenge, 03 proof) and is a new session with a new nonce, so the counter
+restarts at 1; the file records the last session's nonce and counter.
 """
 import argparse
 import asyncio
@@ -92,10 +93,13 @@ async def auth(client, q, msg):
     return await expect(q, 5, "auth reply")
 
 
-async def start_session(client):
+async def start_session(client, key):
+    """02 for a challenge, then 03 with the proof; returns the session nonce."""
     q = asyncio.Queue()
     await client.start_notify(p.AUTH, lambda _, d: q.put_nowait(bytes(d)))
-    return p.parse_session(await auth(client, q, p.session_msg()))
+    nonce = p.parse_session(await auth(client, q, p.session_msg()))
+    p.parse_prove(await auth(client, q, p.prove_msg(key, nonce)))
+    return nonce
 
 
 async def cmd_pair(args):
@@ -122,7 +126,7 @@ async def cmd_status(args):
     try:
         before = await c.read_gatt_char(p.STATUS)
         print(f"read before auth: {len(before)} bytes{' (expected 0)' if before else ''}")
-        await start_session(c)
+        await start_session(c, bytes.fromhex(state["key"]))
 
         def on_status(_, d):
             print("notify:", end=" ")
@@ -142,7 +146,7 @@ async def cmd_cmd(args):
     op = p.op_code(args.op)
     c = await connect(args.address or state.get("address"))
     try:
-        nonce = await start_session(c)
+        nonce = await start_session(c, key)
         counter = state["counter"] + 1 if state.get("nonce") == nonce.hex() else 1
         q = asyncio.Queue()
         await c.start_notify(p.COMMAND, lambda _, d: q.put_nowait(p.parse_result(bytes(d))))
@@ -161,6 +165,31 @@ async def cmd_cmd(args):
         await c.disconnect()
 
 
+async def cmd_stranger(args):
+    """What anyone in range can do without the key. HA's session must survive all of it."""
+    c = await connect(args.address)
+    try:
+        q = asyncio.Queue()
+        await c.start_notify(p.AUTH, lambda _, d: q.put_nowait(bytes(d)))
+        nonce = p.parse_session(await auth(c, q, p.session_msg()))
+        print(f"challenge: {nonce.hex()}")
+        reply = await auth(c, q, p.prove_msg(os.urandom(32), nonce))
+        print(f"bad proof -> {reply.hex()} (expected 0300)")
+        rq = asyncio.Queue()
+        await c.start_notify(p.COMMAND, lambda _, d: rq.put_nowait(p.parse_result(bytes(d))))
+        await c.write_gatt_char(p.COMMAND, p.command_msg(os.urandom(32), nonce, 1, p.OPS["power"], 0), response=True)
+        print(f"forged command -> {await expect(rq, 5, 'result')} (expected BadAuth)")
+        print(f"status read: {len(await c.read_gatt_char(p.STATUS))} bytes (expected 0)")
+        print(f"holding the link {args.hold} s (the board drops unclaimed links after 30 s)")
+        for _ in range(int(args.hold)):
+            if not c.is_connected:
+                print("dropped by the board")
+                break
+            await asyncio.sleep(1)
+    finally:
+        await c.disconnect()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--key-file", type=Path, default=DEFAULT_KEY_FILE)
@@ -174,9 +203,11 @@ def main():
     c.add_argument("value", type=int)
     c.add_argument("--replay", action="store_true", help="resend the same message: expect BadAuth")
     c.add_argument("--bad-mac", action="store_true", help="send it with a corrupted MAC: expect BadAuth")
+    st = sub.add_parser("stranger", help="act as an unpaired device: must not disturb HA's session")
+    st.add_argument("--hold", type=float, default=40, help="seconds to keep the link")
     args = ap.parse_args()
     try:
-        asyncio.run({"pair": cmd_pair, "status": cmd_status, "cmd": cmd_cmd}[args.cmd](args))
+        asyncio.run({"pair": cmd_pair, "status": cmd_status, "cmd": cmd_cmd, "stranger": cmd_stranger}[args.cmd](args))
     except (ClientError, p.ProtoError, ValueError) as e:
         sys.exit(f"error: {e}")
 

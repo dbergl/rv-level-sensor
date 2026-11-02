@@ -7,7 +7,7 @@ import struct
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 
-from vectors import command_mac, pair_key, raw_pub
+from vectors import command_mac, pair_key, raw_pub, session_proof
 
 SERVICE = "af480101-29e2-47f0-a341-4f1a49271bf4"
 AUTH = "af480102-29e2-47f0-a341-4f1a49271bf4"
@@ -15,7 +15,8 @@ STATUS = "af480103-29e2-47f0-a341-4f1a49271bf4"
 COMMAND = "af480104-29e2-47f0-a341-4f1a49271bf4"
 
 PAIR = 0x01
-SESSION = 0x02
+SESSION = 0x02  # challenge request
+PROVE = 0x03
 STATUS_LEN = 34
 RESULT_LEN = 5
 
@@ -61,7 +62,7 @@ def session_msg() -> bytes:
 
 
 def parse_session(reply: bytes) -> bytes:
-    """The session nonce. Raises ProtoError if refused (not paired)."""
+    """The challenge nonce. Raises ProtoError if refused (not paired)."""
     if reply[:1] != bytes([SESSION]):
         raise ProtoError(f"unexpected auth reply {reply.hex()}")
     if len(reply) == 1:
@@ -69,6 +70,19 @@ def parse_session(reply: bytes) -> bytes:
     if len(reply) != 17:
         raise ProtoError(f"bad session reply length {len(reply)}")
     return reply[1:]
+
+
+def prove_msg(key: bytes, nonce: bytes) -> bytes:
+    """03 || proof16: proves the pairing key for this link's challenge; the link becomes HA's session."""
+    return bytes([PROVE]) + session_proof(key, nonce)
+
+
+def parse_prove(reply: bytes) -> None:
+    if reply == bytes([PROVE, 1]):
+        return
+    if reply == bytes([PROVE, 0]):
+        raise ProtoError("session proof refused: wrong pairing key (re-pair) or no challenge")
+    raise ProtoError(f"unexpected auth reply {reply.hex()}")
 
 
 def op_code(op: str) -> int:

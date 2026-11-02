@@ -28,6 +28,7 @@ void HaControl::setKey(const uint8_t key[kKeyLen]) {
 void HaControl::forget() {
   crypto_wipe(key_, sizeof key_);
   paired_ = false;
+  challengeCount_ = 0;
   if (link_ != kNoLink) drop_ = link_;
   endSession();
 }
@@ -38,14 +39,14 @@ void HaControl::endSession() {
   ++sessionId_;  // in-flight results of the old session now go nowhere
 }
 
-HaControl::Auth HaControl::onAuth(uint16_t h, const uint8_t* d, size_t n, bool pairOpen, Out& reply) {
+HaControl::Auth HaControl::onAuth(uint16_t h, const uint8_t* d, size_t n, bool pairAllowed, Out& reply) {
   reply.n = 0;
   if (n == 0) return Auth::None;
   reply.h = h;
   if (d[0] == kPair) {
     reply.d[0] = kPair;
     reply.n = 1;
-    if (n != 1 + kKeyLen || !pairOpen) return Auth::Refused;
+    if (n != 1 + kKeyLen || !pairAllowed) return Auth::Refused;
     uint8_t priv[32], pub[32], key[kKeyLen];
     fill_(priv, sizeof priv);
     bool ok = pairEsp(priv, d + 1, pub, key);
@@ -53,7 +54,7 @@ HaControl::Auth HaControl::onAuth(uint16_t h, const uint8_t* d, size_t n, bool p
     if (!ok) return Auth::Refused;  // low-order peer key
     setKey(key);
     crypto_wipe(key, sizeof key);
-    // Re-pairing replaces the paired HA; whoever held the session must start over.
+    // Re-pairing (a deliberate act at the board) replaces the paired HA; its session ends.
     if (link_ != kNoLink && link_ != h) drop_ = link_;
     endSession();
     memcpy(reply.d + 1, pub, sizeof pub);
@@ -64,19 +65,56 @@ HaControl::Auth HaControl::onAuth(uint16_t h, const uint8_t* d, size_t n, bool p
     reply.d[0] = kSession;
     reply.n = 1;
     if (n != 1 || !paired_) return Auth::Refused;
+    int i = findChallenge(h);
+    if (i < 0) {
+      // Full only if links outnumber kMaxLinks: reuse the oldest slot.
+      if (challengeCount_ == kMaxLinks) clearChallenge(challenges_[0].h);
+      i = int(challengeCount_++);
+      challenges_[i].h = h;
+    }
+    fill_(challenges_[i].nonce, kNonceLen);
+    memcpy(reply.d + 1, challenges_[i].nonce, kNonceLen);
+    reply.n = 1 + kNonceLen;
+    return Auth::Challenge;
+  }
+  if (d[0] == kProve) {
+    reply.d[0] = kProve;
+    reply.d[1] = 0;
+    reply.n = 2;
+    int i = findChallenge(h);
+    if (i < 0) return Auth::Refused;
+    uint8_t nonce[kNonceLen];
+    memcpy(nonce, challenges_[i].nonce, kNonceLen);
+    clearChallenge(h);  // one try per challenge
+    if (n != 1 + kMacLen || !paired_) return Auth::Refused;
+    uint8_t want[kMacLen];
+    sessionProof(key_, nonce, want);
+    bool ok = crypto_verify16(want, d + 1) == 0;
+    crypto_wipe(want, sizeof want);
+    if (!ok) return Auth::Refused;
     if (link_ != kNoLink && link_ != h) drop_ = link_;
     endSession();
-    uint8_t nonce[kNonceLen];
-    fill_(nonce, sizeof nonce);
     session_.begin(nonce);
     link_ = h;
     statusSent_ = false;
-    memcpy(reply.d + 1, nonce, sizeof nonce);
-    reply.n = 1 + sizeof nonce;
+    reply.d[1] = 1;
     return Auth::Session;
   }
   reply.n = 0;
   return Auth::None;
+}
+
+int HaControl::findChallenge(uint16_t h) const {
+  for (size_t i = 0; i < challengeCount_; ++i)
+    if (challenges_[i].h == h) return int(i);
+  return -1;
+}
+
+void HaControl::clearChallenge(uint16_t h) {
+  int i = findChallenge(h);
+  if (i < 0) return;
+  for (size_t k = size_t(i); k + 1 < challengeCount_; ++k) challenges_[k] = challenges_[k + 1];
+  --challengeCount_;
 }
 
 void HaControl::onCommand(uint16_t h, const uint8_t* d, size_t n, uint32_t nowMs, Out& reply) {
@@ -98,6 +136,7 @@ void HaControl::onCommand(uint16_t h, const uint8_t* d, size_t n, uint32_t nowMs
 }
 
 void HaControl::onDisconnect(uint16_t h) {
+  clearChallenge(h);
   if (h == link_) endSession();
   if (h == drop_) drop_ = kNoLink;
 }

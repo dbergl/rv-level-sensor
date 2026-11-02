@@ -16,37 +16,41 @@ constexpr const char* kAuthUuid = "af480102-29e2-47f0-a341-4f1a49271bf4";
 constexpr const char* kStatusUuid = "af480103-29e2-47f0-a341-4f1a49271bf4";
 constexpr const char* kCommandUuid = "af480104-29e2-47f0-a341-4f1a49271bf4";
 
-class AuthCb : public NimBLECharacteristicCallbacks {
+// Every characteristic reports subscriptions: notifications go only to links that asked.
+class SubCb : public NimBLECharacteristicCallbacks {
  public:
-  explicit AuthCb(BleHaService& s) : s_(s) {}
+  SubCb(BleHaService& s, uint8_t chr) : s_(s), chr_(chr) {}
+  void onSubscribe(NimBLECharacteristic*, ble_gap_conn_desc* desc, uint16_t subValue) override {
+    s_.onSubscribe(desc->conn_handle, chr_, subValue != 0);
+  }
+
+ protected:
+  BleHaService& s_;
+  uint8_t chr_;
+};
+
+class AuthCb : public SubCb {
+ public:
+  explicit AuthCb(BleHaService& s) : SubCb(s, BleHaService::kAuthChr) {}
   void onWrite(NimBLECharacteristic* c, ble_gap_conn_desc* desc) override {
     NimBLEAttValue v = c->getValue();
     s_.onAuthWrite(desc->conn_handle, v.data(), v.length());
   }
-
- private:
-  BleHaService& s_;
 };
 
-class CommandCb : public NimBLECharacteristicCallbacks {
+class CommandCb : public SubCb {
  public:
-  explicit CommandCb(BleHaService& s) : s_(s) {}
+  explicit CommandCb(BleHaService& s) : SubCb(s, BleHaService::kCommandChr) {}
   void onWrite(NimBLECharacteristic* c, ble_gap_conn_desc* desc) override {
     NimBLEAttValue v = c->getValue();
     s_.onCommandWrite(desc->conn_handle, v.data(), v.length());
   }
-
- private:
-  BleHaService& s_;
 };
 
-class StatusCb : public NimBLECharacteristicCallbacks {
+class StatusCb : public SubCb {
  public:
-  explicit StatusCb(BleHaService& s) : s_(s) {}
+  explicit StatusCb(BleHaService& s) : SubCb(s, BleHaService::kStatusChr) {}
   void onRead(NimBLECharacteristic* c, ble_gap_conn_desc* desc) override { s_.onStatusRead(c, desc->conn_handle); }
-
- private:
-  BleHaService& s_;
 };
 
 }  // namespace
@@ -55,6 +59,11 @@ BleHaService::BleHaService(BleServer& server, ac::Bridge& bridge, NvsStore& stor
     : server_(server), bridge_(bridge), store_(store), window_(window), ha_(bridge, fillRandom) {}
 
 void BleHaService::fillRandom(uint8_t* out, size_t n) { esp_fill_random(out, n); }
+
+bool BleHaService::fits(uint16_t h, size_t n) {
+  uint16_t mtu = ble_att_mtu(h);  // 0 if the link is gone
+  return mtu >= 3 && size_t(mtu - 3) >= n;
+}
 
 bool BleHaService::begin() {
   mu_ = xSemaphoreCreateMutex();
@@ -77,6 +86,9 @@ bool BleHaService::begin() {
 void BleHaService::enqueue(uint8_t kind, uint16_t h, const uint8_t* d, size_t n) {
   Lock l(mu_);
   if (queued_ == kQueue) return;  // HA waits for each reply; a flood is not HA
+  size_t mine = 0;
+  for (size_t i = 0; i < queued_; ++i) mine += queue_[i].h == h;
+  if (mine >= kPerLink) return;  // one link can't crowd out the others
   Write& w = queue_[queued_++];
   w.h = h;
   w.kind = kind;
@@ -96,6 +108,22 @@ void BleHaService::onDisconnect(uint16_t h) {
     goneLost_ = true;
   }
   if (h == readLink_) readLink_ = kNoLink;
+  setSub(h, 0xFF, false);
+}
+
+void BleHaService::onSubscribe(uint16_t h, uint8_t chr, bool on) {
+  Lock l(mu_);
+  setSub(h, chr, on);
+}
+
+void BleHaService::setSub(uint16_t h, uint8_t chr, bool on) {
+  for (size_t i = 0; i < subCount_; ++i) {
+    if (subs_[i].h != h) continue;
+    subs_[i].chrs = on ? subs_[i].chrs | chr : subs_[i].chrs & ~chr;
+    if (subs_[i].chrs == 0) subs_[i] = subs_[--subCount_];
+    return;
+  }
+  if (on && subCount_ < kLinks) subs_[subCount_++] = {h, chr};
 }
 
 void BleHaService::onStatusRead(NimBLECharacteristic* c, uint16_t h) {
@@ -133,8 +161,21 @@ void BleHaService::takeDisconnects() {
   if (lost && ha_.sessionLink() != kNoLink) ha_.onDisconnect(ha_.sessionLink());
 }
 
-void BleHaService::send(NimBLECharacteristic* c, const ac::HaControl::Out& o) {
-  if (o.n == 0 || o.h == kNoLink) return;
+bool BleHaService::subscribed(uint16_t h, uint8_t chr) {
+  Lock l(mu_);
+  for (size_t i = 0; i < subCount_; ++i)
+    if (subs_[i].h == h) return subs_[i].chrs & chr;
+  return false;
+}
+
+void BleHaService::send(NimBLECharacteristic* c, uint8_t chr, const ac::HaControl::Out& o) {
+  if (o.n == 0 || o.h == kNoLink || !subscribed(o.h, chr)) return;
+  if (!fits(o.h, o.n)) {
+    if (mtuWarned_ != o.h) Serial.printf("HA link %u: MTU too small for %u-byte notifications, not sent\n", o.h,
+                                         static_cast<unsigned>(o.n));
+    mtuWarned_ = o.h;
+    return;
+  }
   // To that one link: NimBLECharacteristic::notify would go to every subscriber.
   os_mbuf* om = ble_hs_mbuf_from_flat(o.d, static_cast<uint16_t>(o.n));
   if (om != nullptr) ble_gattc_notify_custom(o.h, c->getHandle(), om);  // consumes om
@@ -144,25 +185,28 @@ void BleHaService::handle(const Write& w, uint32_t nowMs) {
   ac::HaControl::Out out;
   if (w.kind == kCommand) {
     ha_.onCommand(w.h, w.d, w.n, nowMs, out);
-    send(command_, out);
+    send(command_, kCommandChr, out);
     return;
   }
-  switch (ha_.onAuth(w.h, w.d, w.n, window_.isOpen(nowMs), out)) {
+  // The pairing reply must arrive whole, or HA would hold a key the board doesn't.
+  bool pairAllowed = window_.isOpen(nowMs) && fits(w.h, 1 + ac::kKeyLen);
+  switch (ha_.onAuth(w.h, w.d, w.n, pairAllowed, out)) {
     case ac::HaControl::Auth::Paired:
       store_.saveHaKey(ha_.key());
       window_.close();
       Serial.println("Home Assistant paired");
       break;
     case ac::HaControl::Auth::Session:
-      server_.claim(w.h);  // HA's link: not dropped for idling
+      server_.claim(w.h);  // proven HA link: not dropped for idling
       break;
     case ac::HaControl::Auth::Refused:
-      if (w.n > 0 && w.d[0] == ac::HaControl::kPair) Serial.println("Home Assistant pairing refused");
+      if (w.d[0] == ac::HaControl::kPair) Serial.println("Home Assistant pairing refused");
+      if (w.d[0] == ac::HaControl::kProve) Serial.printf("HA link %u: session proof refused\n", w.h);
       break;
     default:
       break;
   }
-  send(auth_, out);
+  send(auth_, kAuthChr, out);
 }
 
 void BleHaService::dropPending() {
@@ -176,11 +220,15 @@ void BleHaService::poll(uint32_t nowMs) {
   while (pop(w)) handle(w, nowMs);
   dropPending();
 
-  ac::HaControl::Out out;
-  while (ha_.nextResult(out)) send(command_, out);
-  if (ha_.statusDue(nowMs, out)) send(status_, out);
-
   uint16_t link = ha_.sessionLink();
+  ac::HaControl::Out out;
+  while (ha_.nextResult(out)) send(command_, kCommandChr, out);
+  // The first status goes out once the session's link subscribes to it.
+  uint16_t subbed = link != kNoLink && subscribed(link, kStatusChr) ? link : kNoLink;
+  if (subbed != statusSubbed_ && subbed != kNoLink) ha_.statusNow();
+  statusSubbed_ = subbed;
+  if (ha_.statusDue(nowMs, out)) send(status_, kStatusChr, out);
+
   {
     Lock l(mu_);
     readLink_ = goneCount_ > 0 || goneLost_ ? kNoLink : link;  // a pending disconnect may be this link

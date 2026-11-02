@@ -30,6 +30,10 @@ bool pairEsp(const uint8_t espPriv[32], const uint8_t haPub[32], uint8_t espPub[
 void commandMac(const uint8_t key[32], const uint8_t nonce[16], uint32_t counter, const uint8_t* body,
                 size_t n, uint8_t mac[16]);
 
+// BLAKE2b-128 keyed with key over "RVL-AC-SESSION-v1" || nonce: proves the key for one link's
+// session challenge.
+void sessionProof(const uint8_t key[32], const uint8_t nonce[16], uint8_t out[16]);
+
 // One connection's replay window. msg = counter (u32 LE) || body || mac16.
 class Session {
  public:

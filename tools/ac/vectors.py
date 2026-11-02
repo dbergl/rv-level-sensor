@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 PAIR_LABEL = b"RVL-AC-PAIR-v1"
 CMD_LABEL = b"RVL-AC-CMD-v1"
+SESSION_LABEL = b"RVL-AC-SESSION-v1"
 
 
 def raw_pub(k: X25519PrivateKey) -> bytes:
@@ -29,6 +30,10 @@ def pair_key(shared: bytes, ha_pub: bytes, esp_pub: bytes) -> bytes:
 
 def command_mac(key: bytes, nonce: bytes, counter: int, body: bytes) -> bytes:
     return hashlib.blake2b(CMD_LABEL + nonce + struct.pack("<I", counter) + body, key=key, digest_size=16).digest()
+
+
+def session_proof(key: bytes, nonce: bytes) -> bytes:
+    return hashlib.blake2b(SESSION_LABEL + nonce, key=key, digest_size=16).digest()
 
 
 def main() -> None:
@@ -56,6 +61,7 @@ def main() -> None:
     print(f"body = {body.hex()}")
     print(f"msg = {msg.hex()}")
     print(f"mac = {mac.hex()}")
+    print(f"session_proof = {session_proof(key, nonce).hex()}")
 
 
 if __name__ == "__main__":

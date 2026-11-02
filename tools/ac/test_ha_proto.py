@@ -11,6 +11,7 @@ HA_PUB = bytes.fromhex("8f40c5adb68f25624ae5b214ea767a6ec94d829d3d7b5e1ad1ba6f3e
 PAIR_KEY = bytes.fromhex("c727107d2c582dd9c86f513150a56d1043ed571501b60a279fda3df22d108c45")
 NONCE = bytes.fromhex("a0a1a2a3a4a5a6a7a8a9aaabacadaeaf")
 MSG = bytes.fromhex("01000000020036e461c8a09b15adb32d84cfb276225c")
+SESSION_PROOF = bytes.fromhex("6c5786a795708b586a4e97f451f2d872")
 
 
 def test_pair_message_and_key_match_the_vectors():
@@ -60,3 +61,10 @@ def test_result_and_status_parsing():
     s = p.parse_status(d)
     assert s["responding"] and s["power"] and not s["celsius"]
     assert (s["mode"], s["fan"], s["setpoint_f"], s["lvp_v"]) == ("cool", 0, 72, 30.0)
+
+
+def test_prove_message_matches_the_vector():
+    assert p.prove_msg(PAIR_KEY, NONCE) == b"\x03" + SESSION_PROOF
+    p.parse_prove(b"\x03\x01")
+    with pytest.raises(p.ProtoError, match="refused"):
+        p.parse_prove(b"\x03\x00")
