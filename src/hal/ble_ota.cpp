@@ -5,7 +5,6 @@
 
 #include <cstring>
 
-#include "hal/ble_bthome.h"
 #include "hal/ota_flash.h"
 #include "ota_pubkey.h"
 
@@ -17,22 +16,12 @@ constexpr const char* kControlUuid = "af480003-29e2-47f0-a341-4f1a49271bf4";
 constexpr const char* kDataUuid = "af480004-29e2-47f0-a341-4f1a49271bf4";
 constexpr size_t kVersionMax = 40;
 
-class ServerCb : public NimBLEServerCallbacks {
- public:
-  explicit ServerCb(BleOta& o) : o_(o) {}
-  void onConnect(NimBLEServer*, ble_gap_conn_desc* desc) override { o_.onConnect(desc->conn_handle); }
-  void onDisconnect(NimBLEServer*) override { o_.onDisconnect(); }
-
- private:
-  BleOta& o_;
-};
-
 class ControlCb : public NimBLECharacteristicCallbacks {
  public:
   explicit ControlCb(BleOta& o) : o_(o) {}
-  void onWrite(NimBLECharacteristic* c) override {
+  void onWrite(NimBLECharacteristic* c, ble_gap_conn_desc* desc) override {
     NimBLEAttValue v = c->getValue();
-    o_.onControlWrite(v.data(), v.length());
+    o_.onControlWrite(desc->conn_handle, v.data(), v.length());
   }
 
  private:
@@ -42,9 +31,9 @@ class ControlCb : public NimBLECharacteristicCallbacks {
 class DataCb : public NimBLECharacteristicCallbacks {
  public:
   explicit DataCb(BleOta& o) : o_(o) {}
-  void onWrite(NimBLECharacteristic* c) override {
+  void onWrite(NimBLECharacteristic* c, ble_gap_conn_desc* desc) override {
     NimBLEAttValue v = c->getValue();
-    o_.onDataWrite(v.data(), v.length());
+    o_.onDataWrite(desc->conn_handle, v.data(), v.length());
   }
 
  private:
@@ -62,18 +51,15 @@ class InfoCb : public NimBLECharacteristicCallbacks {
 
 }  // namespace
 
-BleOta::BleOta(OtaFlash& flash, BleBthome& adv, const char* version)
-    : adv_(adv), version_(version), session_(flash, kOtaPublicKey) {}
+BleOta::BleOta(OtaFlash& flash, BleServer& server, const char* version)
+    : server_(server), version_(version), session_(flash, kOtaPublicKey) {}
 
 bool BleOta::begin() {
   mu_ = xSemaphoreCreateMutex();
   if (mu_ == nullptr) return false;
-  NimBLEDevice::setMTU(517);
-  server_ = NimBLEDevice::createServer();
-  if (server_ == nullptr) return false;
-  server_->setCallbacks(new ServerCb(*this));
-  server_->advertiseOnDisconnect(false);  // poll() owns advertising
-  NimBLEService* svc = server_->createService(kServiceUuid);
+  if (server_.server() == nullptr) return false;
+  server_.addListener(this);
+  NimBLEService* svc = server_.server()->createService(kServiceUuid);
   info_ = svc->createCharacteristic(kInfoUuid, NIMBLE_PROPERTY::READ);
   info_->setCallbacks(new InfoCb(*this));
   control_ = svc->createCharacteristic(kControlUuid, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY);
@@ -95,16 +81,14 @@ void BleOta::poll(uint32_t nowMs) {
     session_.tick(nowMs);
     open = session_.windowOpen();
   }
-  bool connected = connected_.load();
-  if (!open && connected && !dropRequested_) {
-    server_->disconnect(connHandle_.load());
-    dropRequested_ = true;
+  uint16_t client = client_.load();
+  if (open) {
+    dropped_ = kNoLink;
+  } else if (client != kNoLink && client != dropped_) {
+    server_.server()->disconnect(client);
+    dropped_ = client;
   }
-  bool want = open && !connected;
-  if (want != connectable_ || linkChanged_.exchange(false)) {
-    adv_.setConnectable(want);
-    connectable_ = want;
-  }
+  server_.setWantConnectable(BleServer::kWantOta, open && client == kNoLink);
 }
 
 bool BleOta::rebootDue(uint32_t nowMs) {
@@ -117,20 +101,14 @@ bool BleOta::windowOpen() {
   return session_.windowOpen();
 }
 
-void BleOta::onConnect(uint16_t connHandle) {
-  connHandle_ = connHandle;
-  connected_ = true;
-  dropRequested_ = false;
-  linkChanged_ = true;  // the connection stopped advertising; poll() restarts it non-connectable
-}
+// A link is the update client only once it writes control; it may be Home Assistant's.
+void BleOta::onConnect(uint16_t) {}
 
-void BleOta::onDisconnect() {
-  {
-    Lock l(mu_);
-    session_.onDisconnect();
-  }
-  connected_ = false;
-  linkChanged_ = true;
+void BleOta::onDisconnect(uint16_t h) {
+  Lock l(mu_);
+  if (client_.load() != h) return;
+  session_.onDisconnect();
+  client_ = kNoLink;
 }
 
 void BleOta::notify(const ota::Notice& n) {
@@ -140,20 +118,24 @@ void BleOta::notify(const ota::Notice& n) {
   control_->notify();
 }
 
-void BleOta::onControlWrite(const uint8_t* d, size_t len) {
+void BleOta::onControlWrite(uint16_t h, const uint8_t* d, size_t len) {
   ota::Notice n;
   {
     Lock l(mu_);
+    uint16_t c = client_.load();
+    if (c == kNoLink && session_.windowOpen()) client_ = c = h;
+    if (c != kNoLink && c != h) return;  // the session belongs to the client's link
     n = session_.onControl(d, len, millis());
   }
   notify(n);
 }
 
-void BleOta::onDataWrite(const uint8_t* d, size_t len) {
+void BleOta::onDataWrite(uint16_t h, const uint8_t* d, size_t len) {
   ota::Notice n;
   bool send;
   {
     Lock l(mu_);
+    if (client_.load() != h) return;  // no transfer without a client (BEGIN claims it)
     send = session_.onData(d, len, millis(), n);
   }
   if (send) notify(n);

@@ -8,6 +8,7 @@
 #include "fw_version.h"
 #include "hal/ble_bthome.h"
 #include "hal/ble_ota.h"
+#include "hal/ble_server.h"
 #include "hal/can_twai.h"
 #include "hal/mpu6050.h"
 #include "hal/nvs_store.h"
@@ -34,7 +35,11 @@ uint32_t lastSampleMs = 0;
 uint32_t lastPrintMs = 0;
 
 OtaFlash otaFlash;
-BleOta bleOta(otaFlash, ble, kFwVersion);
+BleServer bleServer;
+BleOta bleOta(otaFlash, bleServer, kFwVersion);
+// Without a GATT service there is no server: the sensor only broadcasts, as before the AC bridge.
+constexpr bool kBleServerWanted = cfg::AC_BRIDGE_ENABLED || !cfg::BLE_OTA_DISABLED;
+bool bleServerUp = false;
 bool bleOtaUp = false;  // BleOta::begin succeeded; its mutex exists only then
 bool fastCpu = false;   // at CPU_MHZ_UPDATE while the update window is open
 bool onTrial = false;       // booted a new image that hasn't confirmed itself yet
@@ -196,15 +201,21 @@ void setup() {
     }
   }
   if constexpr (cfg::BLE_ENABLED) {
-    if (!ble.begin(cfg::BLE_NAME, cfg::BLE_ADV_INTERVAL_MS, cfg::BLE_REFRESH_MS, cfg::BLE_REAPPLY_MS)) {
+    if (!ble.begin(cfg::BLE_NAME, cfg::BLE_ADV_INTERVAL_MS, cfg::BLE_REFRESH_MS, cfg::BLE_REAPPLY_MS, nullptr)) {
       Serial.println("BLE init failed");
-    } else if (cfg::BLE_OTA_DISABLED) {
-      Serial.println("Bluetooth updates disabled in this build");
-    } else if (!bleOta.begin()) {
-      Serial.println("BLE update service init failed");
     } else {
-      bleOtaUp = true;
-      node->setUpdateWindowSupported(true);
+      if (kBleServerWanted) {
+        bleServerUp = bleServer.begin(ble);
+        if (!bleServerUp) Serial.println("BLE server init failed");
+      }
+      if (cfg::BLE_OTA_DISABLED) {
+        Serial.println("Bluetooth updates disabled in this build");
+      } else if (!bleServerUp || !bleOta.begin()) {
+        Serial.println("BLE update service init failed");
+      } else {
+        bleOtaUp = true;
+        node->setUpdateWindowSupported(true);
+      }
     }
   }
   Serial.printf("RV-C level sensor %s firmware %s (slot %u)\n", productId, kFwVersion, OtaFlash::runningSlot());
@@ -238,8 +249,13 @@ void loop() {
       if (s.valid) imuValidSeen = true;
     }
     node->update(s, now);
-    // Task 7 reworks the advert; without leveling there is no leveling data to broadcast yet.
-    if constexpr (cfg::BLE_ENABLED && cfg::LEVELING_ENABLED) ble.update(bleReading(s), now);
+    if constexpr (cfg::BLE_ENABLED) {
+      if constexpr (cfg::LEVELING_ENABLED) {
+        ble.update(bleReading(s), now);
+      } else {
+        ble.update(now);  // name only, so the AC service can be found
+      }
+    }
   }
   if (node->rebootDue(now)) reboot("GENERAL_RESET");
   settleTrial(now);
@@ -256,6 +272,7 @@ void loop() {
       fastCpu = open;
     }
   }
+  if (bleServerUp) bleServer.poll();  // after bleOta.poll, which sets what it wants
 
   LedMode mode = LedMode::Level;
   if ((cfg::LEVELING_ENABLED && health.faulted()) || can.busOff()) {

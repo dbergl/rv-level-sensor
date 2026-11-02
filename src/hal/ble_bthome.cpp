@@ -5,7 +5,8 @@
 #include <cstring>
 #include <string>
 
-bool BleBthome::begin(const char* name, uint32_t advIntervalMs, uint32_t refreshMs, uint32_t reapplyMs) {
+bool BleBthome::begin(const char* name, uint32_t advIntervalMs, uint32_t refreshMs, uint32_t reapplyMs,
+                      const char* serviceUuid) {
   NimBLEDevice::init(name);
   adv_ = NimBLEDevice::getAdvertising();
   if (adv_ == nullptr) return false;
@@ -13,6 +14,7 @@ bool BleBthome::begin(const char* name, uint32_t advIntervalMs, uint32_t refresh
   // reboot. esp_random() is only truly random once the radio is running, i.e. after init().
   enc_ = bthome::Encoder(static_cast<uint8_t>(esp_random()));
   name_ = name;
+  serviceUuid_ = serviceUuid;
   schedule_ = bthome::AdvertSchedule(refreshMs, reapplyMs);
   uint16_t units = static_cast<uint16_t>(advIntervalMs * 1000 / 625);
   adv_->setAdvertisementType(BLE_GAP_CONN_MODE_NON);
@@ -35,13 +37,28 @@ void BleBthome::update(const bthome::Reading& r, uint32_t nowMs) {
   if (!changed && started_) n = enc_.encode(r, body, sizeof body, true);
   std::memcpy(last_, body, n);
   lastLen_ = n;
+  apply(body, n);
+}
 
+void BleBthome::update(uint32_t nowMs) {
+  if (adv_ == nullptr) return;
+  if (!schedule_.refreshDue(nowMs)) return;
+  if (!schedule_.shouldSend(!started_, nowMs)) return;  // nothing changes; re-applied every reapplyMs
+  apply(nullptr, 0);
+}
+
+void BleBthome::apply(const uint8_t* body, size_t n) {
   NimBLEAdvertisementData d;
   d.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
-  d.setServiceData(NimBLEUUID(bthome::kServiceUuid), std::string(reinterpret_cast<const char*>(body), n));
+  if (n > 0) {
+    d.setServiceData(NimBLEUUID(bthome::kServiceUuid), std::string(reinterpret_cast<const char*>(body), n));
+  } else {
+    d.setName(name_);  // for passive scanners, which never see the scan response
+  }
   adv_->setAdvertisementData(d);  // NimBLE applies new data while advertising
   NimBLEAdvertisementData sr;       // re-sent too: a host reset clears both
   sr.setName(name_);
+  if (serviceUuid_ != nullptr) sr.setCompleteServices(NimBLEUUID(serviceUuid_));
   adv_->setScanResponseData(sr);
   if (!started_) started_ = adv_->start();
 }
