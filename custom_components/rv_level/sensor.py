@@ -10,7 +10,7 @@ from homeassistant.const import DEGREE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import CONF_UNIT
+from .const import CONF_UNIT, KIND_AC, entry_kind
 from .entity import RvLevelEntity
 from .leveling import CORNERS
 from .runtime import RvLevelConfigEntry, Snapshot
@@ -59,6 +59,8 @@ async def async_setup_entry(
     entry: RvLevelConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    if entry_kind(entry.data) == KIND_AC:
+        return  # Task 13: the AC entities
     async_add_entities(RvLevelSensor(entry, d) for d in DESCRIPTIONS)
 
 

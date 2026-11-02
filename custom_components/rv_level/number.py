@@ -9,7 +9,9 @@ from .const import (
     CONF_TRACK,
     CONF_UNIT,
     CONF_WHEELBASE,
+    KIND_AC,
     SETTINGS,
+    entry_kind,
 )
 from .entity import RvLevelEntity
 from .runtime import RvLevelConfigEntry
@@ -28,6 +30,8 @@ async def async_setup_entry(
     entry: RvLevelConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
+    if entry_kind(entry.data) == KIND_AC:
+        return  # Task 13: the AC entities
     async_add_entities(RvLevelNumber(entry, key) for key in KEYS)
 
 

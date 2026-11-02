@@ -1,11 +1,12 @@
 import re
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CoreState, HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from .binary_sensor import DESCRIPTIONS as BINARY_SENSOR_DESCRIPTIONS
-from .const import DOMAIN
+from .const import CONF_KIND, DOMAIN, KIND_LEVELING
 from .runtime import RvLevelConfigEntry
 from .sensor import DESCRIPTIONS as SENSOR_DESCRIPTIONS
 
@@ -17,6 +18,17 @@ WANTED_IDS: dict[str, str] = {
     **{d.key: f"sensor.rv_level_{d.key}" for d in SENSOR_DESCRIPTIONS},
     **{d.key: f"binary_sensor.rv_level_{d.key}" for d in BINARY_SENSOR_DESCRIPTIONS},
 }
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Version 2 adds the entry kind; every version 1 entry is a leveling device."""
+    if entry.version > 2:
+        return False
+    if entry.version == 1:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_KIND: KIND_LEVELING}, version=2
+        )
+    return True
 
 
 def _provided(hass: HomeAssistant, entity_id: str) -> bool:

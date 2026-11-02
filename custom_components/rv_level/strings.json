@@ -2,6 +2,13 @@
   "config": {
     "step": {
       "user": {
+        "title": "Add to RV Level",
+        "menu_options": {
+          "leveling": "Leveling sensor",
+          "ac": "Air conditioner (AC bridge)"
+        }
+      },
+      "leveling": {
         "title": "Choose your RV Level sensor",
         "description": "Pick the BTHome device to use. The dashboard needs the Mushroom cards, so install Mushroom from HACS if you have not already.",
         "data": {
@@ -16,12 +23,29 @@
           "track": "Track",
           "driver_side": "Driver's side"
         }
+      },
+      "ac": {
+        "title": "Choose your AC bridge",
+        "description": "Pick the RV Level sensor that runs the AC bridge.",
+        "data": {
+          "address": "AC bridge"
+        }
+      },
+      "pair": {
+        "title": "Pair with the AC bridge",
+        "description": "Type `pair` on the sensor's console, or power-cycle an unpaired sensor, then submit"
       }
     },
     "abort": {
       "no_devices": "No RV Level sensor found. Make sure it is powered, within Bluetooth range of Home Assistant, and added under the BTHome integration, then try again.",
-      "already_configured": "This sensor is already set up.",
-      "single_instance_allowed": "RV Level is already set up. Only one is allowed."
+      "already_configured": "This device is already set up.",
+      "already_in_progress": "This device is already being set up.",
+      "no_devices_found": "No AC bridge found. Make sure the sensor is powered, built with the AC bridge, and within Bluetooth range of Home Assistant, then try again."
+    },
+    "flow_title": "{name}",
+    "error": {
+      "pair_refused": "The AC bridge is not in pairing mode. Type `pair` on the sensor's console, or power-cycle an unpaired sensor, then submit again.",
+      "cannot_connect": "Could not reach the AC bridge. Make sure the sensor is powered and within Bluetooth range of Home Assistant, then submit again."
     }
   },
   "options": {

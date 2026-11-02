@@ -1,3 +1,4 @@
+import pytest
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -6,8 +7,13 @@ from custom_components.rv_level.const import DOMAIN
 
 
 async def _start(hass):
-    return await hass.config_entries.flow.async_init(
+    result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert result["menu_options"] == ["leveling", "ac"]
+    return await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "leveling"}
     )
 
 
@@ -39,7 +45,7 @@ async def test_picker_with_two_devices(hass, bthome_device):
     )
 
     result = await _start(hass)
-    assert result["step_id"] == "user"
+    assert result["step_id"] == "leveling"
     options = result["data_schema"].schema["device_id"].config["options"]
     assert {o["label"] for o in options} == {"RV Level 3032", "RV Level AABB"}
 
@@ -56,6 +62,7 @@ async def test_picker_with_two_devices(hass, bthome_device):
     assert entry.unique_id == "02:00:00:00:AA:BB"
     assert entry.data["device_id"] == second
     assert entry.data["address"] == "02:00:00:00:AA:BB"
+    assert entry.data["kind"] == "leveling"
 
 
 async def test_no_device_aborts(hass):
@@ -144,11 +151,29 @@ async def test_options_flow_updates_vehicle(hass, bthome_device):
     }
 
 
-async def test_single_instance(hass, bthome_device):
+@pytest.mark.parametrize("data", [{"kind": "leveling"}, {}], ids=["kind", "no_kind"])
+async def test_second_leveling_entry_aborts(hass, bthome_device, data):
     bthome_device()
-    MockConfigEntry(domain=DOMAIN, unique_id="other").add_to_hass(hass)
+    MockConfigEntry(domain=DOMAIN, unique_id="other", version=2, data=data).add_to_hass(hass)
 
     result = await _start(hass)
 
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
-    assert result["reason"] == "single_instance_allowed"
+    assert result["reason"] == "already_configured"
+
+
+async def test_ac_entry_does_not_block_leveling(hass, bthome_device):
+    bthome_device()
+    MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="ac_02:00:00:00:AC:01",
+        version=2,
+        data={"kind": "ac", "address": "02:00:00:00:AC:01", "key": "00" * 32},
+    ).add_to_hass(hass)
+    MockConfigEntry(
+        domain=DOMAIN, unique_id="ac_02:00:00:00:AC:02", source=config_entries.SOURCE_IGNORE
+    ).add_to_hass(hass)
+
+    result = await _start(hass)
+
+    assert result["step_id"] == "vehicle"

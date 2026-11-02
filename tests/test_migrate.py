@@ -1,11 +1,13 @@
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_START
 from homeassistant.core import CoreState
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.rv_level.const import DOMAIN
 from custom_components.rv_level.migrate import ISSUE_YAML_PACKAGE_LOADED
 
-from conftest import _setup
+from conftest import US_OPTIONS, _setup
 
 WANTED = "sensor.rv_level_lift_fl"
 
@@ -137,3 +139,28 @@ async def test_orphan_removed_once_started(hass, bthome_device):
     assert er.async_get(hass).async_get(WANTED).platform == DOMAIN
     assert hass.states.get(WANTED).attributes.get("restored") is None
     assert _issue(hass) is None
+
+
+async def test_migrate_v1_entry_gets_kind_leveling(hass, bthome_device):
+    device_id = bthome_device()
+    data = {"device_id": device_id, "address": "02:00:00:00:30:32", "unit": "in"}
+    entry = MockConfigEntry(
+        domain=DOMAIN, unique_id="02:00:00:00:30:32", version=1, data=data, options=US_OPTIONS
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.version == 2
+    assert entry.data == {**data, "kind": "leveling"}
+    assert hass.states.get(WANTED) is not None
+
+
+async def test_entry_from_newer_version_not_loaded(hass):
+    entry = MockConfigEntry(domain=DOMAIN, version=3, data={"kind": "leveling"})
+    entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.state is ConfigEntryState.MIGRATION_ERROR

@@ -1,6 +1,13 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 DOMAIN = "rv_level"
+
+CONF_KIND = "kind"
+KIND_LEVELING = "leveling"
+KIND_AC = "ac"
+CONF_KEY = "key"  # AC pairing key, hex
 
 CONF_WHEELBASE = "wheelbase"
 CONF_TRACK = "track"
@@ -15,6 +22,11 @@ CONF_UNIT = "unit"
 
 UNIT_IN = "in"
 UNIT_CM = "cm"
+
+
+def entry_kind(data: Mapping[str, Any]) -> str:
+    """Entries from before the AC was added carry no kind; they are leveling."""
+    return data.get(CONF_KIND, KIND_LEVELING)
 
 
 @dataclass(frozen=True)

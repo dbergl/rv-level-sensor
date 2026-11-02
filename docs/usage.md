@@ -207,8 +207,8 @@ zeroing and the sensor's own settings are done from the panel, USB or RV-C.
 2. Install **Mushroom** from HACS if you don't have it. The dashboard needs it.
 3. In HACS, open **⋮ → Custom repositories**, add `https://github.com/dbergl/rv-level-sensor` as type
    **Integration**, then install **RV Level** and restart Home Assistant.
-4. Go to **Settings → Devices & services → Add integration** and choose **RV Level**. Pick the
-   sensor if it asks, then enter your wheelbase and track and check the
+4. Go to **Settings → Devices & services → Add integration**, choose **RV Level**, then
+   **Leveling sensor**. Pick the sensor if it asks, then enter your wheelbase and track and check the
    driver's side. **RV Level** appears in the sidebar.
 
 ### Moving from the YAML install

@@ -13,6 +13,11 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 @pytest.fixture(autouse=True)
+def auto_mock_bluetooth(mock_bluetooth):
+    """rv_level depends on bluetooth; keep its scanner and adapters off the host."""
+
+
+@pytest.fixture(autouse=True)
 def no_deprecation_reports(caplog):
     """Fail on HA's warnings that the integration uses a deprecated API."""
     yield

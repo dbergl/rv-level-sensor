@@ -7,6 +7,7 @@ import logging
 from collections.abc import Callable
 
 from bleak.exc import BleakError
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later
@@ -20,6 +21,7 @@ BACKOFF_MIN = 1
 BACKOFF_MAX = 60
 
 type ClientFactory = Callable[..., AcClient]
+type AcConfigEntry = ConfigEntry[AcRuntime]
 
 
 class AcRuntime:

@@ -3,10 +3,12 @@
   "name": "RV Level",
   "version": "0.1.1",
   "config_flow": true,
-  "single_config_entry": true,
   "integration_type": "device",
   "iot_class": "calculated",
-  "dependencies": ["http", "lovelace"],
+  "bluetooth": [
+    {"service_uuid": "af480101-29e2-47f0-a341-4f1a49271bf4", "connectable": true}
+  ],
+  "dependencies": ["bluetooth", "http", "lovelace"],
   "after_dependencies": ["bthome"],
   "requirements": [],
   "codeowners": ["@dbergl"],
