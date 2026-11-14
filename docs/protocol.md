@@ -218,7 +218,7 @@ ignored.
 | 1FEF9h | THERMOSTAT_COMMAND_1 | Byte 1 bits 0–3 mode: `0` power off, `1` cool (powers on if needed), `4` fan only; heat (`2`), dehumidify (`6`) and `F` do nothing. Bits 4–5 fan mode: `00` auto; `01` with byte 2 = 1–200 (0.5 % per bit) sets level `(raw + 20) / 40`, kept to 1–5. Bytes 5–6 cool setpoint: `FFFA` one °F up, `FFF9` one °F down, below `FE00` an absolute setpoint (ignored outside 61–86 °F). Heat setpoint (bytes 3–4) is ignored |
 | 1FEF8h | THERMOSTAT_COMMAND_2 | Byte 2 low 6 bits: `01` sleep, `04` eco, `10` turbo, `00` back to plain cool, `3F` nothing. Pressing the preset that is already on clears it |
 | 0FFA0h | Proprietary option command | Byte 1 bits 0–1 vent (`FD`), bits 2–3 display (`F7`), bits 4–5 Recirc (`DF`): `01` toggles, `00` off, `11` no change. Vent and display toggle from the unit's reported state. The unit has no fresh-air damper, so Recirc is held by the sensor only: it is not sent to the unit, and it goes back to on whenever the AC is off |
-| 1FFE0h | AIR_CONDITIONER_COMMAND | Byte 5 compressor output, 0.5 % per bit: above 0 cool (powers on if needed); `00` fan only if byte 4 is above 0, else power off. Byte 4 fan speed above 0 sets level `(raw + 20) / 40`, kept to 1–5. Above `C8` is no change |
+| 1FFE0h | AIR_CONDITIONER_COMMAND | Byte 5 compressor output, 0.5 % per bit: above 0 cool (powers on if needed); `00` power off if byte 4 is also `00`, else fan only. Byte 4 fan speed above 0 sets level `(raw + 20) / 40`, kept to 1–5. Above `C8` is no change |
 
 A panel command is done only when the unit's next status shows it; the panel then follows the
 status, not the button. Commands are never held over an outage.

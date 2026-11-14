@@ -284,6 +284,20 @@ void test_ac_command() {
   expectWrite(c[2], 0x01, 0x01);
 }
 
+void test_ac_command_output_off_fan_unchanged_is_fan_only() {
+  Rig r;
+  r.ready();
+  // Fan FF is "no change", not "fan off": stop the compressor, keep the AC running.
+  uint8_t d[8] = {7, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF};
+  r.press(AIR_CONDITIONER_COMMAND, d);
+  auto c = r.commands();
+  TEST_ASSERT_EQUAL(1, c.size());
+  expectWrite(c[0], 0x02, 0x02);
+  uint8_t none[8] = {7, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  r.press(AIR_CONDITIONER_COMMAND, none);
+  TEST_ASSERT_EQUAL(1, r.commands().size());
+}
+
 void test_panel_cool_fan_setpoint() {
   Rig r;
   r.unit.mode = Mode::FanOnly;
@@ -495,6 +509,7 @@ int main() {
   RUN_TEST(test_status_auto_fan_full_and_ac_status);
   RUN_TEST(test_recirculate_toggle_is_panel_side);
   RUN_TEST(test_ac_command);
+  RUN_TEST(test_ac_command_output_off_fan_unchanged_is_fan_only);
   RUN_TEST(test_panel_cool_fan_setpoint);
   RUN_TEST(test_panel_mode_cool_from_fan_writes);
   RUN_TEST(test_panel_ignores_heat_dry_and_other_instances);

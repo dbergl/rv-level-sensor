@@ -101,8 +101,9 @@ void AcPanel::onAcCommand(const uint8_t* d, uint32_t nowMs) {
   if (c.outputRaw > 0 && c.outputRaw <= kFull) {
     submit(ac::Op::Mode, static_cast<int>(cm::Mode::Cool), nowMs);
   } else if (c.outputRaw == 0) {
-    if (fan) submit(ac::Op::Mode, static_cast<int>(cm::Mode::FanOnly), nowMs);
-    else submit(ac::Op::Power, 0, nowMs);
+    // Fan 00 too is off; a fan speed or "no change" (above C8) keeps the fan running.
+    if (c.fanRaw == 0) submit(ac::Op::Power, 0, nowMs);
+    else submit(ac::Op::Mode, static_cast<int>(cm::Mode::FanOnly), nowMs);
   }
   if (fan) submit(ac::Op::Fan, fanLevel(c.fanRaw), nowMs);
 }
