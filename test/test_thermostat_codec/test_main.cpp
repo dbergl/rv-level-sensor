@@ -16,6 +16,8 @@ void test_dgn_constants() {
   TEST_ASSERT_EQUAL_HEX32(0x1FF9C, dgn::THERMOSTAT_AMBIENT_STATUS);
   TEST_ASSERT_EQUAL_HEX32(0x0FFA0, dgn::FIREFLY_AC_OPTIONS);
   TEST_ASSERT_EQUAL_HEX32(0x0FFA1, dgn::FIREFLY_AC_OPTIONS_STATUS);
+  TEST_ASSERT_EQUAL_HEX32(0x1FFE1, dgn::AIR_CONDITIONER_STATUS);
+  TEST_ASSERT_EQUAL_HEX32(0x1FFE0, dgn::AIR_CONDITIONER_COMMAND);
 }
 
 void test_encode_temp_rounds_up() {
@@ -67,12 +69,31 @@ void test_pack_status2() {
 
 void test_pack_options_status() {
   uint8_t out[8];
-  packOptionsStatus(7, true, false, out);
+  packOptionsStatus(7, true, false, false, 0xFFFF, out);
   TEST_ASSERT_EQUAL_HEX8(7, out[0]);
-  TEST_ASSERT_EQUAL_HEX8(0xF1, out[1]);
+  TEST_ASSERT_EQUAL_HEX8(0xC1, out[1]);
   TEST_ASSERT_EQUAL_HEX8(0xFF, out[2]);
-  packOptionsStatus(7, true, true, out);
-  TEST_ASSERT_EQUAL_HEX8(0xF5, out[1]);
+  TEST_ASSERT_EQUAL_HEX8(0xFF, out[3]);
+  packOptionsStatus(7, true, true, false, 0xFFFF, out);
+  TEST_ASSERT_EQUAL_HEX8(0xC5, out[1]);
+  packOptionsStatus(7, false, false, true, 445, out);  // recirculate, LVP 44.5 V
+  const uint8_t want[8] = {0x07, 0xD0, 0xBD, 0x01, 0xFF, 0xFF, 0xFF, 0xFF};
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(want, out, 8);
+}
+
+void test_pack_ac_status() {
+  uint8_t out[8];
+  packAcStatus(7, 0x78, 200, out);
+  const uint8_t want[8] = {0x07, 0x01, 0xC8, 0xC8, 0x78, 0xC8, 0x0A, 0xFF};
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(want, out, 8);
+}
+
+void test_unpack_ac_command() {
+  uint8_t in[8] = {7, 0xFF, 0xFF, 0xFF, 0x50, 0xC8, 0xFF, 0xFF};
+  AcCommand c = unpackAcCommand(in);
+  TEST_ASSERT_EQUAL_UINT8(7, c.instance);
+  TEST_ASSERT_EQUAL_HEX8(0x50, c.fanRaw);
+  TEST_ASSERT_EQUAL_HEX8(0xC8, c.outputRaw);
 }
 
 void test_pack_ambient() {
@@ -121,6 +142,12 @@ void test_unpack_options_command() {
   c = unpackOptionsCommand(in);
   TEST_ASSERT_EQUAL_UINT8(1, c.oscillate);
   TEST_ASSERT_EQUAL_UINT8(3, c.display);
+  TEST_ASSERT_EQUAL_UINT8(3, c.recirculate);
+  in[1] = 0xDF;
+  c = unpackOptionsCommand(in);
+  TEST_ASSERT_EQUAL_UINT8(1, c.recirculate);
+  TEST_ASSERT_EQUAL_UINT8(3, c.oscillate);
+  TEST_ASSERT_EQUAL_UINT8(3, c.display);
 }
 
 int main() {
@@ -132,6 +159,8 @@ int main() {
   RUN_TEST(test_pack_status1_off);
   RUN_TEST(test_pack_status2);
   RUN_TEST(test_pack_options_status);
+  RUN_TEST(test_pack_ac_status);
+  RUN_TEST(test_unpack_ac_command);
   RUN_TEST(test_pack_ambient);
   RUN_TEST(test_unpack_command1);
   RUN_TEST(test_unpack_command2_codes);

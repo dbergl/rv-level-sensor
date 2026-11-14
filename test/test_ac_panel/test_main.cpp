@@ -152,8 +152,8 @@ void test_silent_until_responding() {
   TEST_ASSERT_EQUAL(1, r.bus.count(THERMOSTAT_AMBIENT_STATUS));
   TEST_ASSERT_EQUAL(1, r.bus.count(THERMOSTAT_STATUS_2));
   TEST_ASSERT_EQUAL(1, r.bus.count(FIREFLY_AC_OPTIONS_STATUS));
-  TEST_ASSERT_EQUAL(4, r.bus.frames.size());
-  TEST_ASSERT_EQUAL(0, r.bus.count(0x1FFE1));
+  TEST_ASSERT_EQUAL(1, r.bus.count(AIR_CONDITIONER_STATUS));
+  TEST_ASSERT_EQUAL(5, r.bus.frames.size());
   TEST_ASSERT_EQUAL_UINT8(6, parseId(r.bus.frames[0].id).priority);
   TEST_ASSERT_EQUAL_UINT8(kSa, parseId(r.bus.frames[0].id).sa);
 }
@@ -219,6 +219,69 @@ void test_status_off() {
   TEST_ASSERT_EQUAL_HEX8(0x30 | 0xC0, s1.data[1]);
   TEST_ASSERT_EQUAL_HEX8(0, s1.data[2]);
   TEST_ASSERT_EQUAL_HEX8(0xFF, r.bus.withDgn(THERMOSTAT_STATUS_2).at(0).data[3]);
+  // Display and vent shown off, Recirc on, LVP (256 + 2Ch) = 30.0 V.
+  auto o = r.bus.withDgn(FIREFLY_AC_OPTIONS_STATUS).at(0);
+  TEST_ASSERT_EQUAL_HEX8(0xD0, o.data[1]);
+  TEST_ASSERT_EQUAL_HEX8(0x2C, o.data[2]);
+  TEST_ASSERT_EQUAL_HEX8(0x01, o.data[3]);
+  auto a = r.bus.withDgn(AIR_CONDITIONER_STATUS).at(0);
+  TEST_ASSERT_EQUAL_HEX8(0, a.data[4]);
+  TEST_ASSERT_EQUAL_HEX8(0, a.data[5]);
+}
+
+void test_status_auto_fan_full_and_ac_status() {
+  Rig r;
+  r.unit.fan = 0;
+  r.advance(200);
+  auto s1 = r.bus.withDgn(THERMOSTAT_STATUS_1).at(0);
+  TEST_ASSERT_EQUAL_HEX8(0xC1, s1.data[1]);
+  TEST_ASSERT_EQUAL_HEX8(0xC8, s1.data[2]);
+  auto a = r.bus.withDgn(AIR_CONDITIONER_STATUS).at(0);
+  const uint8_t want[8] = {0x07, 0x01, 0xC8, 0xC8, 0xC8, 0xC8, 0x0A, 0xFF};
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(want, a.data, 8);
+  auto o = r.bus.withDgn(FIREFLY_AC_OPTIONS_STATUS).at(0);
+  TEST_ASSERT_EQUAL_HEX8(0xD4, o.data[1]);  // display on, Recirc on
+}
+
+void test_recirculate_toggle_is_panel_side() {
+  Rig r;
+  r.ready();
+  uint8_t d[8] = {7, 0xDF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  CanFrame f;
+  f.id = makeId(6, FIREFLY_AC_OPTIONS, kPanelSa);
+  for (int i = 0; i < 8; ++i) f.data[i] = d[i];
+  r.panel.onFrame(f, r.now);
+  r.panel.update(true, kSa, r.now);  // sent at once, not at the heartbeat
+  TEST_ASSERT_EQUAL_HEX8(0xC4, r.bus.withDgn(FIREFLY_AC_OPTIONS_STATUS).at(0).data[1]);
+  TEST_ASSERT_EQUAL(0, r.commands().size());  // nothing written to the unit
+  r.bus.clear();
+  r.panel.onFrame(f, r.now);
+  r.panel.update(true, kSa, r.now);
+  TEST_ASSERT_EQUAL_HEX8(0xD4, r.bus.withDgn(FIREFLY_AC_OPTIONS_STATUS).at(0).data[1]);
+  // Turned off, then off again: Recirc forced back on.
+  r.panel.onFrame(f, r.now);
+  r.unit.power = false;
+  r.sendStatus();
+  r.bus.clear();
+  r.panel.update(true, kSa, r.now);
+  TEST_ASSERT_EQUAL_HEX8(0xD0, r.bus.withDgn(FIREFLY_AC_OPTIONS_STATUS).at(0).data[1]);
+}
+
+void test_ac_command() {
+  Rig r;
+  r.unit.mode = Mode::FanOnly;
+  r.ready();
+  uint8_t d[8] = {7, 0xFF, 0xFF, 0xFF, 0x50, 0xC8, 0xFF, 0xFF};  // fan 40 %, output 100 %
+  r.press(AIR_CONDITIONER_COMMAND, d);
+  auto c = r.commands();
+  TEST_ASSERT_EQUAL(2, c.size());
+  expectWrite(c[0], 0x02, 0x01);
+  expectWrite(c[1], 0x04, 0x02);
+  uint8_t off[8] = {7, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF};
+  r.press(AIR_CONDITIONER_COMMAND, off);
+  c = r.commands();
+  TEST_ASSERT_EQUAL(3, c.size());
+  expectWrite(c[2], 0x01, 0x01);
 }
 
 void test_panel_cool_fan_setpoint() {
@@ -348,8 +411,8 @@ void test_tx_failure_backs_off() {
   c.n = &attempts;
   AcPanel p(r.br, c);
   for (uint32_t t = 0; t < 1000; t += 10) p.update(true, kSa, r.now + t);
-  // First try sends 4; one retry after 500 ms sends the 4 pending again.
-  TEST_ASSERT_LESS_OR_EQUAL(8, attempts);
+  // First try sends 5; one retry after 500 ms sends the 5 pending again.
+  TEST_ASSERT_LESS_OR_EQUAL(10, attempts);
 }
 
 void test_tx_failure_retries_only_failed() {
@@ -429,6 +492,9 @@ int main() {
   RUN_TEST(test_goes_silent_when_unit_lost);
   RUN_TEST(test_status_mapping_eco_fan3_72);
   RUN_TEST(test_status_off);
+  RUN_TEST(test_status_auto_fan_full_and_ac_status);
+  RUN_TEST(test_recirculate_toggle_is_panel_side);
+  RUN_TEST(test_ac_command);
   RUN_TEST(test_panel_cool_fan_setpoint);
   RUN_TEST(test_panel_mode_cool_from_fan_writes);
   RUN_TEST(test_panel_ignores_heat_dry_and_other_instances);

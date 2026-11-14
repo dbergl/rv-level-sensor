@@ -10,6 +10,12 @@ namespace {
 
 constexpr uint8_t kPanelMode0 = 0, kPanelModeCool = 1, kPanelModeFan = 4;
 constexpr uint8_t kCmdClear = 0x00, kCmdSleep = 0x01, kCmdEco = 0x04, kCmdTurbo = 0x10;
+constexpr uint8_t kFull = 200;  // 100 % at 0.5 %/bit
+
+int fanLevel(uint8_t raw) {  // 0.5 %/bit, 20 % per level
+  int n = (raw + 20) / 40;
+  return n < 1 ? 1 : n > 5 ? 5 : n;
+}
 
 Preset presetOf(cm::Mode m) {
   switch (m) {
@@ -33,6 +39,7 @@ void AcPanel::onFrame(const CanFrame& f, uint32_t nowMs) {
     case THERMOSTAT_COMMAND_1: onCommand1(f.data, nowMs); break;
     case THERMOSTAT_COMMAND_2: onCommand2(f.data, nowMs); break;
     case FIREFLY_AC_OPTIONS: onOptions(f.data, nowMs); break;
+    case AIR_CONDITIONER_COMMAND: onAcCommand(f.data, nowMs); break;
     default: break;
   }
 }
@@ -46,9 +53,8 @@ void AcPanel::onCommand1(const uint8_t* d, uint32_t nowMs) {
 
   if (c.fanBits == 0) {
     submit(ac::Op::Fan, 0, nowMs);
-  } else if (c.fanBits == 1 && c.fanRaw > 0 && c.fanRaw <= 200) {
-    int n = (c.fanRaw + 20) / 40;  // 0.5 %/bit, 20 % per level
-    submit(ac::Op::Fan, n < 1 ? 1 : n > 5 ? 5 : n, nowMs);
+  } else if (c.fanBits == 1 && c.fanRaw > 0 && c.fanRaw <= kFull) {
+    submit(ac::Op::Fan, fanLevel(c.fanRaw), nowMs);
   }
 
   if (c.coolRaw == SETPOINT_UP) submit(ac::Op::StepSetpoint, 1, nowMs);
@@ -84,6 +90,27 @@ void AcPanel::onOptions(const uint8_t* d, uint32_t nowMs) {
   else if (c.oscillate == 0) submit(ac::Op::Oscillate, 0, nowMs);
   if (c.display == 1) submit(ac::Op::Display, !s.display, nowMs);
   else if (c.display == 0) submit(ac::Op::Display, 0, nowMs);
+  // 1 toggles, 0 forces off; while the AC is off it stays on.
+  if (c.recirculate == 1) setRecirculate(!recirculate_ || !s.power);
+  else if (c.recirculate == 0) setRecirculate(!s.power);
+}
+
+void AcPanel::onAcCommand(const uint8_t* d, uint32_t nowMs) {
+  AcCommand c = unpackAcCommand(d);
+  bool fan = c.fanRaw > 0 && c.fanRaw <= kFull;
+  if (c.outputRaw > 0 && c.outputRaw <= kFull) {
+    submit(ac::Op::Mode, static_cast<int>(cm::Mode::Cool), nowMs);
+  } else if (c.outputRaw == 0) {
+    if (fan) submit(ac::Op::Mode, static_cast<int>(cm::Mode::FanOnly), nowMs);
+    else submit(ac::Op::Power, 0, nowMs);
+  }
+  if (fan) submit(ac::Op::Fan, fanLevel(c.fanRaw), nowMs);
+}
+
+void AcPanel::setRecirculate(bool on) {
+  if (on == recirculate_) return;
+  recirculate_ = on;
+  ++localVersion_;
 }
 
 bool AcPanel::sendFrame(uint32_t dgn, uint8_t sa, const uint8_t d[8]) {
@@ -101,14 +128,17 @@ void AcPanel::update(bool claimed, uint8_t sa, uint32_t nowMs) {
     pending_ = 0;
     return;
   }
+  if (!bridge_.status().power) setRecirculate(true);
   if (pending_) {
     if (static_cast<int32_t>(nowMs - retryAt_) < 0) return;
-  } else if (sent_ && bridge_.statusVersion() == sentVersion_ && nowMs - sentMs_ < kHeartbeatMs) {
+  } else if (sent_ && bridge_.statusVersion() == sentVersion_ && localVersion_ == sentLocal_ &&
+             nowMs - sentMs_ < kHeartbeatMs) {
     return;
   } else {
-    pending_ = 0x0F;
+    pending_ = 0x1F;
     sent_ = true;
     sentVersion_ = bridge_.statusVersion();
+    sentLocal_ = localVersion_;
     sentMs_ = nowMs;
   }
   sendStatus(sa, nowMs);
@@ -126,6 +156,7 @@ void AcPanel::sendStatus(uint8_t sa, uint32_t nowMs) {
     }
     if (s.fan == 0) {
       t.fanBits = 0;
+      t.fanRaw = kFull;  // auto runs the fan; the panel shows Auto plus full speed
     } else if (s.fan <= 5) {
       t.fanBits = 1;
       t.fanRaw = static_cast<uint8_t>(s.fan * 0x28);
@@ -151,8 +182,15 @@ void AcPanel::sendStatus(uint8_t sa, uint32_t nowMs) {
   }
   packThermoStatus2(instance_, s.power, s.power ? presetOf(s.mode) : Preset::None, d);
   step(4, THERMOSTAT_STATUS_2);
-  packOptionsStatus(instance_, s.oscillating, s.display, d);
+  // While off the panel lights nothing on the bottom row but Recirc.
+  packOptionsStatus(instance_, s.power && s.oscillating, s.power && s.display,
+                    s.power ? recirculate_ : true, s.lvpDeciV, d);
   step(8, FIREFLY_AC_OPTIONS_STATUS);
+  uint8_t output = 0;  // compressor output: full while cooling, n/a if the mode is unknown
+  if (s.power && s.mode == cm::Mode::Unknown) output = 0xFF;
+  else if (s.power && s.mode != cm::Mode::FanOnly) output = kFull;
+  packAcStatus(instance_, t.fanRaw, output, d);
+  step(16, AIR_CONDITIONER_STATUS);
   if (pending_) retryAt_ = nowMs + kRetryMs;
 }
 

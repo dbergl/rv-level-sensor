@@ -184,22 +184,22 @@ records 01h–03h. Settings are saved in flash.
 
 Builds with the AC bridge stand in for RV-C air conditioner/thermostat **instance 7**, which a
 Firefly panel (v66) shows and controls. Byte 0 of every message below is the instance, `07`.
-Status goes out at priority 6 from whatever address the sensor holds (`19FFE2BF`, `19FF9CBF`,
-`19FEFABF`, `18FFA1BF` at BFh). The panel matches only the DGN and instance, not the sender.
+Status goes out at priority 6 from whatever address the sensor holds (`19FFE2BF`, `19FFE1BF`,
+`19FF9CBF`, `19FEFABF`, `18FFA1BF` at BFh). The panel matches only the DGN and instance, not the sender.
 
-**Sent** (all four together, on a change and at least every 5 s):
+**Sent** (all together, on a change and at least every 5 s):
 
 | DGN | Name | Content |
 |---|---|---|
-| 1FFE2h | THERMOSTAT_STATUS_1 | Byte 1 bits 0–3 mode: `0` off, `1` cool, `4` fan only, `6` dehumidify, `F` unknown. Bits 4–5 fan mode: `00` auto, `01` fixed speed, `11` n/a. Bits 6–7 `11`. Byte 2 fan speed, 0.5 % per bit: level N is `N × 28h`; `00` while off; `FF` if unknown. Bytes 3–4 `FF FF` (heat setpoint). Bytes 5–6 cool setpoint, `FFFF` if unknown. Byte 7 `FF` |
+| 1FFE2h | THERMOSTAT_STATUS_1 | Byte 1 bits 0–3 mode: `0` off, `1` cool, `4` fan only, `6` dehumidify, `F` unknown. Bits 4–5 fan mode: `00` auto, `01` fixed speed, `11` n/a. Bits 6–7 `11`. Byte 2 fan speed, 0.5 % per bit: level N is `N × 28h`; `C8` (100 %) on auto; `00` while off; `FF` if unknown. Bytes 3–4 `FF FF` (heat setpoint). Bytes 5–6 cool setpoint, `FFFF` if unknown. Byte 7 `FF` |
+| 1FFE1h | AIR_CONDITIONER_STATUS | Byte 1 `01` (manual). Bytes 2–3 `C8 C8` (max fan / max output 100 %). Byte 4 fan speed, as 1FFE2 byte 2. Byte 5 compressor output: `C8` while on in cool or a preset, `00` in fan only or off, `FF` if the mode is unknown. Byte 6 `0A` (dead band 1.0 °C). Byte 7 `FF` |
 | 1FF9Ch | THERMOSTAT_AMBIENT_STATUS | Bytes 1–2 air temperature; bytes 3–7 `FF`. Not sent while the temperature is unknown |
 | 1FEFAh | THERMOSTAT_STATUS_2 | Byte 3: `C0` plus `01` sleep, `04` eco or `10` turbo while on; `FF` while off. Other bytes `FF` |
-| 0FFA1h | Proprietary option status | Byte 1: `F0` plus `04` if the display is on and `01` if the vent is oscillating. Other bytes `FF` |
+| 0FFA1h | Proprietary option status | Byte 1: `C0` plus `01` if the vent is oscillating, `04` if the display is on and `10` for Recirc. Bytes 2–3 the unit's low-voltage protection, u16 LE, 0.1 V per bit (shown on the panel's A/C SETUP page). Other bytes `FF` |
 
 While the AC is off, mode is `0`, fan mode `11` and fan speed `00`, so the panel lights no mode,
-Auto or speed bar, and 1FEFA lights no preset. The setpoint and air temperature are still sent. A
-mode the bridge cannot decode is sent as `F` (n/a), never as a guess. The sensor does not send
-AIR_CONDITIONER_STATUS (1FFE1h); the panel does not read it.
+Auto or speed bar, 1FEFA lights no preset, and 0FFA1 lights only Recirc. The setpoint and air temperature are still sent. A
+mode the bridge cannot decode is sent as `F` (n/a), never as a guess.
 
 **Silence is the stale signal.** The sensor sends none of these while it has no live AC unit: the
 link is down, or no status frame has arrived for 10 s. The panel marks the AC stale after 30 s
@@ -210,14 +210,15 @@ without them. It also sends nothing until it has claimed an RV-C address.
 value: 72 °F is 24E8h (`E8 24`).
 
 **Received** (any sender other than the sensor itself, 8 bytes, byte 0 = `07`; the panel sends
-from 9Fh at priority 6, `19FEF99F`, `19FEF89F`, `18FFA09F`). Anything the unit cannot do is
+from 9Fh at priority 6, `19FEF99F`, `19FEF89F`, `18FFA09F`; 1FFE0h is also accepted). Anything the unit cannot do is
 ignored.
 
 | DGN | Name | Effect |
 |---|---|---|
 | 1FEF9h | THERMOSTAT_COMMAND_1 | Byte 1 bits 0–3 mode: `0` power off, `1` cool (powers on if needed), `4` fan only; heat (`2`), dehumidify (`6`) and `F` do nothing. Bits 4–5 fan mode: `00` auto; `01` with byte 2 = 1–200 (0.5 % per bit) sets level `(raw + 20) / 40`, kept to 1–5. Bytes 5–6 cool setpoint: `FFFA` one °F up, `FFF9` one °F down, below `FE00` an absolute setpoint (ignored outside 61–86 °F). Heat setpoint (bytes 3–4) is ignored |
 | 1FEF8h | THERMOSTAT_COMMAND_2 | Byte 2 low 6 bits: `01` sleep, `04` eco, `10` turbo, `00` back to plain cool, `3F` nothing. Pressing the preset that is already on clears it |
-| 0FFA0h | Proprietary option command | Byte 1 bits 0–1 vent, bits 2–3 display: `01` toggles from the unit's reported state, `00` off, `11` no change |
+| 0FFA0h | Proprietary option command | Byte 1 bits 0–1 vent (`FD`), bits 2–3 display (`F7`), bits 4–5 Recirc (`DF`): `01` toggles, `00` off, `11` no change. Vent and display toggle from the unit's reported state. The unit has no fresh-air damper, so Recirc is held by the sensor only: it is not sent to the unit, and it goes back to on whenever the AC is off |
+| 1FFE0h | AIR_CONDITIONER_COMMAND | Byte 5 compressor output, 0.5 % per bit: above 0 cool (powers on if needed); `00` fan only if byte 4 is above 0, else power off. Byte 4 fan speed above 0 sets level `(raw + 20) / 40`, kept to 1–5. Above `C8` is no change |
 
 A panel command is done only when the unit's next status shows it; the panel then follows the
 status, not the button. Commands are never held over an outage.

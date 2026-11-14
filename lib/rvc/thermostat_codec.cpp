@@ -57,9 +57,22 @@ void packThermoStatus2(uint8_t instance, bool on, Preset p, uint8_t out[8]) {
   if (on) out[3] = static_cast<uint8_t>(0xC0 | presetBits(p));
 }
 
-void packOptionsStatus(uint8_t instance, bool oscillate, bool display, uint8_t out[8]) {
+void packOptionsStatus(uint8_t instance, bool oscillate, bool display, bool recirculate,
+                       uint16_t lvpDeciV, uint8_t out[8]) {
   fill(instance, out);
-  out[1] = static_cast<uint8_t>(0xF0 | (display ? 0x04 : 0) | (oscillate ? 0x01 : 0));
+  out[1] = static_cast<uint8_t>(0xC0 | (recirculate ? 0x10 : 0) | (display ? 0x04 : 0) |
+                                (oscillate ? 0x01 : 0));
+  putU16(lvpDeciV, &out[2]);
+}
+
+void packAcStatus(uint8_t instance, uint8_t fanRaw, uint8_t outputRaw, uint8_t out[8]) {
+  fill(instance, out);
+  out[1] = 1;    // manual
+  out[2] = 200;  // max fan speed 100 %
+  out[3] = 200;  // max output level 100 %
+  out[4] = fanRaw;
+  out[5] = outputRaw;
+  out[6] = 10;   // dead band 1.0 degC
 }
 
 ThermoCommand1 unpackThermoCommand1(const uint8_t in[8]) {
@@ -73,7 +86,10 @@ ThermoCommand2 unpackThermoCommand2(const uint8_t in[8]) {
 }
 
 OptionsCommand unpackOptionsCommand(const uint8_t in[8]) {
-  return {in[0], static_cast<uint8_t>(in[1] & 3), static_cast<uint8_t>((in[1] >> 2) & 3)};
+  return {in[0], static_cast<uint8_t>(in[1] & 3), static_cast<uint8_t>((in[1] >> 2) & 3),
+          static_cast<uint8_t>((in[1] >> 4) & 3)};
 }
+
+AcCommand unpackAcCommand(const uint8_t in[8]) { return {in[0], in[4], in[5]}; }
 
 }  // namespace rvc

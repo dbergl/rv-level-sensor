@@ -24,6 +24,8 @@ constexpr uint32_t THERMOSTAT_COMMAND_1 = 0x1FEF9;
 constexpr uint32_t THERMOSTAT_STATUS_2 = 0x1FEFA;
 constexpr uint32_t THERMOSTAT_COMMAND_2 = 0x1FEF8;
 constexpr uint32_t THERMOSTAT_AMBIENT_STATUS = 0x1FF9C;
+constexpr uint32_t AIR_CONDITIONER_STATUS = 0x1FFE1;
+constexpr uint32_t AIR_CONDITIONER_COMMAND = 0x1FFE0;
 constexpr uint32_t FIREFLY_AC_OPTIONS = 0x0FFA0;         // proprietary, panel -> AC
 constexpr uint32_t FIREFLY_AC_OPTIONS_STATUS = 0x0FFA1;  // proprietary, AC -> panel
 // Proprietary, for the Firefly panel's LEVEL page

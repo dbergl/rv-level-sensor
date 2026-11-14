@@ -25,7 +25,12 @@ void packAmbient(uint8_t instance, int f, uint8_t out[8]);      // 1FF9C
 
 enum class Preset : uint8_t { None, Eco, Sleep, Turbo };
 void packThermoStatus2(uint8_t instance, bool on, Preset p, uint8_t out[8]);  // 1FEFA
-void packOptionsStatus(uint8_t instance, bool oscillate, bool display, uint8_t out[8]);  // 0FFA1
+// Byte 1: 2-bit fields, oscillate bits 0-1, display 2-3, recirculate 4-5 (1 on, 0 off), 6-7 n/a.
+// Bytes 2-3: the unit's low-voltage protection, u16 LE, 0.1 V/bit (0xFFFF unknown).
+void packOptionsStatus(uint8_t instance, bool oscillate, bool display, bool recirculate,
+                       uint16_t lvpDeciV, uint8_t out[8]);  // 0FFA1
+// Manual, max fan 100 %, max output 100 %, fan and output 0.5 %/bit (0xFF n/a), dead band 1.0 degC.
+void packAcStatus(uint8_t instance, uint8_t fanRaw, uint8_t outputRaw, uint8_t out[8]);  // 1FFE1
 
 struct ThermoCommand1 {
   uint8_t instance;
@@ -47,7 +52,15 @@ struct OptionsCommand {
   uint8_t instance;
   uint8_t oscillate;  // 2-bit: 0 off, 1 on/press, 3 none
   uint8_t display;
+  uint8_t recirculate;
 };
 OptionsCommand unpackOptionsCommand(const uint8_t in[8]);  // 0FFA0
+
+struct AcCommand {
+  uint8_t instance;
+  uint8_t fanRaw;     // 0.5 %/bit, > 200 = no change
+  uint8_t outputRaw;  // 0.5 %/bit, > 200 = no change
+};
+AcCommand unpackAcCommand(const uint8_t in[8]);  // 1FFE0
 
 }  // namespace rvc
